@@ -1,12 +1,12 @@
 extern crate sdl2;
 
+use embedded_graphics::geometry::Size;
+use embedded_graphics::pixelcolor::Rgb565;
+use embedded_graphics::prelude::*;
 use sdl2::pixels::Color;
 use sdl2::rect::Point as SDLPoint;
 use sdl2::render::Canvas;
 use sdl2::video::Window;
-use embedded_graphics::prelude::*;
-use embedded_graphics::pixelcolor::Rgb565;
-use embedded_graphics::geometry::Size;
 
 /// Trait to unify graphics backends (SDL2 and RP2040)
 pub trait GraphicsBackend: DrawTarget<Color = Rgb565> + OriginDimensions {
@@ -21,7 +21,8 @@ pub struct SDL2Display {
 impl SDL2Display {
     /// Creates a new SDL2 display, **taking `video_subsystem` as a parameter**
     pub fn new(video_subsystem: &sdl2::VideoSubsystem) -> Self {
-        let window = video_subsystem.window("Embedded UI", 240, 240)
+        let window = video_subsystem
+            .window("Embedded UI", 240, 240)
             .position_centered()
             .opengl()
             .build()

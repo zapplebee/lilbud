@@ -1,13 +1,13 @@
 mod sdl2_display;
 
-use sdl2_display::{SDL2Display, GraphicsBackend};
+use embedded_graphics::geometry::{Point, Size};
+use embedded_graphics::pixelcolor::Rgb565;
+use embedded_graphics::prelude::*;
+use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
+use sdl2_display::{GraphicsBackend, SDL2Display};
 use std::time::Duration;
-use embedded_graphics::prelude::*;
-use embedded_graphics::primitives::{Rectangle, PrimitiveStyle};
-use embedded_graphics::pixelcolor::Rgb565;
-use embedded_graphics::geometry::{Point, Size};
 
 fn draw_ui<B: GraphicsBackend>(display: &mut B)
 where
