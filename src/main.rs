@@ -1,14 +1,15 @@
-mod config;  // ✅ Add this line to include `config.rs`
-mod ui;
+mod config; // ✅ Add this line to include `config.rs`
 mod sdl2_display;
+mod ui;
 
-use crate::config::{WIDTH, HEIGHT};  use embedded_graphics::prelude::WebColors;
+use crate::config::{HEIGHT, WIDTH};
+use embedded_graphics::prelude::WebColors;
 // ✅ Now `config.rs` is available
-use sdl2_display::SDL2Display;
-use std::time::Duration;
+use embedded_graphics::pixelcolor::Rgb565;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use embedded_graphics::pixelcolor::Rgb565;
+use sdl2_display::SDL2Display;
+use std::time::Duration;
 
 fn main() -> Result<(), String> {
     let sdl_context = sdl2::init()?;
