@@ -10,7 +10,7 @@ use embedded_graphics::primitives::{
 use rand::Rng;
 
 use crate::config::{HEIGHT, WIDTH};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 #[derive(Deserialize, Debug)]
 struct FaceDataLog {
@@ -26,11 +26,50 @@ struct FaceData {
 }
 
 /// Struct for point data
-#[derive(Deserialize, Debug)]
+#[derive(Debug)]
 struct PointData {
     x: i32,
     y: i32,
 }
+
+/// Custom deserialization for `PointData`
+impl<'de> Deserialize<'de> for PointData {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RawPointData {
+            x: serde_json::Value,
+            y: serde_json::Value,
+        }
+
+        let raw = RawPointData::deserialize(deserializer)?;
+        
+        // Convert the JSON values to i32 safely
+        fn to_i32<T: serde::de::Error>(value: &serde_json::Value) -> Result<i32, T> {
+            match value {
+                serde_json::Value::Number(num) => {
+                    if let Some(i) = num.as_i64() {
+                        Ok(i as i32) // Safe cast from i64 to i32
+                    } else if let Some(f) = num.as_f64() {
+                        Ok(f.round() as i32) // Round and cast float to i32
+                    } else {
+                        Err(T::custom("Invalid number format"))
+                    }
+                }
+                _ => Err(T::custom("Expected a number")),
+            }
+        }
+        
+
+        Ok(PointData {
+            x: to_i32(&raw.x)?,
+            y: to_i32(&raw.y)?,
+        })
+    }
+}
+
 
 /// Function to render UI into a pixel buffer
 pub fn draw_ui(buffer: &mut [Rgb565; WIDTH * HEIGHT]) {
@@ -40,7 +79,7 @@ pub fn draw_ui(buffer: &mut [Rgb565; WIDTH * HEIGHT]) {
     // Clear screen to black
     fb.clear(Rgb565::BLUE).unwrap();
 
-    let parsed: FaceDataLog = match serde_json::from_str("{\"level\":\"info\",\"message\":{\"emo\":\"sleepy\",\"points\":{\"a\":{\"x\":27,\"y\":16},\"b\":{\"x\":213,\"y\":16},\"c\":{\"x\":224,\"y\":208},\"d\":{\"x\":20,\"y\":206},\"e\":{\"x\":17,\"y\":55},\"f\":{\"x\":88,\"y\":33},\"g\":{\"x\":17,\"y\":65},\"h\":{\"x\":97,\"y\":43},\"i\":{\"x\":136,\"y\":34},\"j\":{\"x\":209,\"y\":50},\"k\":{\"x\":132,\"y\":40},\"l\":{\"x\":209,\"y\":60},\"m\":{\"x\":23,\"y\":123},\"n\":{\"x\":172,\"y\":115},\"o\":{\"x\":117,\"y\":122},\"p\":{\"x\":144,\"y\":121},\"q\":{\"x\":80,\"y\":100},\"r\":{\"x\":140,\"y\":100}}}}") {
+    let parsed: FaceDataLog = match serde_json::from_str("{\"level\":\"info\",\"message\":{\"emo\":\"silly\",\"points\":{\"a\":{\"x\":75,\"y\":76},\"b\":{\"x\":167,\"y\":87},\"c\":{\"x\":154,\"y\":151},\"d\":{\"x\":71,\"y\":142},\"e\":{\"x\":34,\"y\":84},\"f\":{\"x\":102,\"y\":51},\"g\":{\"x\":39,\"y\":90},\"h\":{\"x\":107,\"y\":60},\"i\":{\"x\":137,\"y\":54},\"j\":{\"x\":199,\"y\":91},\"k\":{\"x\":114,\"y\":68},\"l\":{\"x\":198,\"y\":101},\"m\":{\"x\":96,\"y\":131},\"n\":{\"x\":129,\"y\":128},\"o\":{\"x\":96,\"y\":136},\"p\":{\"x\":130,\"y\":136},\"q\":{\"x\":60,\"y\":103},\"r\":{\"x\":174,\"y\":115}}}}") {
         Ok(data) => data,
         Err(e) => {
             println!("Error parsing JSON: {}", e);
