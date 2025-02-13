@@ -1,7 +1,8 @@
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::OnceLock;
+
 use embedded_graphics::draw_target::DrawTarget;
-use embedded_graphics::geometry::OriginDimensions;
-use embedded_graphics::geometry::Point;
-use embedded_graphics::geometry::Size;
+use embedded_graphics::geometry::{OriginDimensions, Point, Size};
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{
@@ -10,87 +11,41 @@ use embedded_graphics::primitives::{
 use rand::Rng;
 
 use crate::config::{HEIGHT, WIDTH};
-use serde::{Deserialize, Deserializer};
+use crate::get_faces::get_random_face;
 
-#[derive(Deserialize, Debug)]
-struct FaceDataLog {
-    level: String,
-    message: FaceData,
-}
+static TICK_STATE: OnceLock<AtomicU32> = OnceLock::new();
 
-/// Struct to match the incoming JSON format
-#[derive(Deserialize, Debug)]
-struct FaceData {
-    emo: String,
-    points: std::collections::HashMap<String, PointData>,
-}
+/// ✅ Atomically increment tick count and wrap at 56
+pub fn tick() {
+    let tick_state = TICK_STATE.get_or_init(|| AtomicU32::new(0));
 
-/// Struct for point data
-#[derive(Debug)]
-struct PointData {
-    x: i32,
-    y: i32,
-}
-
-/// Custom deserialization for `PointData`
-impl<'de> Deserialize<'de> for PointData {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct RawPointData {
-            x: serde_json::Value,
-            y: serde_json::Value,
-        }
-
-        let raw = RawPointData::deserialize(deserializer)?;
-        
-        // Convert the JSON values to i32 safely
-        fn to_i32<T: serde::de::Error>(value: &serde_json::Value) -> Result<i32, T> {
-            match value {
-                serde_json::Value::Number(num) => {
-                    if let Some(i) = num.as_i64() {
-                        Ok(i as i32) // Safe cast from i64 to i32
-                    } else if let Some(f) = num.as_f64() {
-                        Ok(f.round() as i32) // Round and cast float to i32
-                    } else {
-                        Err(T::custom("Invalid number format"))
-                    }
-                }
-                _ => Err(T::custom("Expected a number")),
-            }
-        }
-        
-
-        Ok(PointData {
-            x: to_i32(&raw.x)?,
-            y: to_i32(&raw.y)?,
+    tick_state
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |val| {
+            Some((val + 1) % 128)
         })
-    }
+        .ok();
 }
 
+fn get_tick_state() -> u32 {
+    TICK_STATE
+        .get_or_init(|| AtomicU32::new(0))
+        .load(Ordering::Relaxed)
+}
 
 /// Function to render UI into a pixel buffer
-pub fn draw_ui(buffer: &mut [Rgb565; WIDTH * HEIGHT]) {
+pub fn draw_ui() -> [Rgb565; 57600] {
+    let tick_state = get_tick_state();
+    print!("{:?}\n", tick_state);
+    let mut buffer = [Rgb565::CSS_BLACK; WIDTH * HEIGHT];
+    let face_1 = get_random_face();
     let mut rng = rand::thread_rng();
-    let mut fb = Framebuffer::new(buffer);
+    let mut fb = Framebuffer::new(&mut buffer);
 
     // Clear screen to black
     fb.clear(Rgb565::BLUE).unwrap();
 
-    let parsed: FaceDataLog = match serde_json::from_str("{\"level\":\"info\",\"message\":{\"emo\":\"silly\",\"points\":{\"a\":{\"x\":75,\"y\":76},\"b\":{\"x\":167,\"y\":87},\"c\":{\"x\":154,\"y\":151},\"d\":{\"x\":71,\"y\":142},\"e\":{\"x\":34,\"y\":84},\"f\":{\"x\":102,\"y\":51},\"g\":{\"x\":39,\"y\":90},\"h\":{\"x\":107,\"y\":60},\"i\":{\"x\":137,\"y\":54},\"j\":{\"x\":199,\"y\":91},\"k\":{\"x\":114,\"y\":68},\"l\":{\"x\":198,\"y\":101},\"m\":{\"x\":96,\"y\":131},\"n\":{\"x\":129,\"y\":128},\"o\":{\"x\":96,\"y\":136},\"p\":{\"x\":130,\"y\":136},\"q\":{\"x\":60,\"y\":103},\"r\":{\"x\":174,\"y\":115}}}}") {
-        Ok(data) => data,
-        Err(e) => {
-            println!("Error parsing JSON: {}", e);
-            return; // Handle error gracefully
-        }
-    };
-
     // Convert points to embedded-graphics Points
-    let points: std::collections::HashMap<&str, Point> = parsed
-        .message
-        .points
+    let points: std::collections::HashMap<&str, Point> = face_1
         .iter()
         .map(|(key, val)| {
             (
@@ -100,19 +55,15 @@ pub fn draw_ui(buffer: &mut [Rgb565; WIDTH * HEIGHT]) {
         })
         .collect();
 
-    let margin = 20;
-
     // create secondary background. it ineeds to get painted first so that the face is on top
-
 
     // create the points first so that the randomization is consistent
 
     let secondary_points = [
-        Point::new(rng.gen_range(-10..=10),rng.gen_range(-10..=10)),
-        Point::new(rng.gen_range(-10..=10),rng.gen_range(-10..=10)),
-        Point::new(rng.gen_range(-10..=10),rng.gen_range(-10..=10)),
-        Point::new(rng.gen_range(-10..=10),rng.gen_range(-10..=10)),
-        
+        Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
+        Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
+        Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
+        Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
     ];
     Triangle::new(
         points["a"] + secondary_points[0],
@@ -189,9 +140,9 @@ pub fn draw_ui(buffer: &mut [Rgb565; WIDTH * HEIGHT]) {
         )
         .draw(&mut fb)
         .unwrap();
+    buffer
 }
 
-/// Framebuffer struct to store pixels
 pub struct Framebuffer<'a> {
     buffer: &'a mut [Rgb565; WIDTH * HEIGHT],
 }
@@ -220,7 +171,6 @@ impl<'a> DrawTarget for Framebuffer<'a> {
     }
 }
 
-/// ✅ **Fix: Implement `OriginDimensions`**
 impl<'a> OriginDimensions for Framebuffer<'a> {
     fn size(&self) -> Size {
         Size::new(WIDTH as u32, HEIGHT as u32)
