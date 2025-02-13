@@ -102,23 +102,37 @@ pub fn draw_ui(buffer: &mut [Rgb565; WIDTH * HEIGHT]) {
 
     let margin = 20;
 
+    // create secondary background. it ineeds to get painted first so that the face is on top
+
+
+    // create the points first so that the randomization is consistent
+
+    let secondary_points = [
+        Point::new(rng.gen_range(-10..=10),rng.gen_range(-10..=10)),
+        Point::new(rng.gen_range(-10..=10),rng.gen_range(-10..=10)),
+        Point::new(rng.gen_range(-10..=10),rng.gen_range(-10..=10)),
+        Point::new(rng.gen_range(-10..=10),rng.gen_range(-10..=10)),
+        
+    ];
     Triangle::new(
-        points["a"] + Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
-        points["b"] + Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
-        points["c"] + Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
+        points["a"] + secondary_points[0],
+        points["b"] + secondary_points[1],
+        points["c"] + secondary_points[2],
     )
     .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_PURPLE))
     .draw(&mut fb)
     .unwrap();
 
     Triangle::new(
-        points["c"] + Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
-        points["d"] + Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
-        points["a"] + Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
+        points["c"] + secondary_points[2],
+        points["d"] + secondary_points[3],
+        points["a"] + secondary_points[0],
     )
     .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_PURPLE))
     .draw(&mut fb)
     .unwrap();
+
+    // create a secondary background
 
     Triangle::new(points["a"], points["b"], points["c"])
         .into_styled(PrimitiveStyle::with_fill(Rgb565::GREEN))
