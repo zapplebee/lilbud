@@ -26,7 +26,7 @@ fn main() -> Result<(), String> {
                 Event::KeyDown {
                     keycode: Some(Keycode::Right),
                     ..
-                } => ui::tick(),
+                } => ui::set_face(),
                 _ => {}
             }
         }

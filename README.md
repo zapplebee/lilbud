@@ -13,3 +13,7 @@ But eventually, he'll get built to push on to this board:
 https://www.waveshare.com/rp2040-lcd-1.28.htm
 
 and I'll get to wear him like a pin
+
+<video controls width="250">
+  <source src="https://github.com/user-attachments/assets/70ad6fbf-a501-4cd4-9027-689ed52faaf5" type="video/mp4" />
+</video>
