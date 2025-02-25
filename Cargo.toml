@@ -4,15 +4,21 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-embedded-graphics = "0.7.1"
-embedded-graphics-core = "0.3.3"
+# RP2040 / HAL stuff
+rp-pico = "0.9"
 embedded-hal = "0.2"
-fugit = "0.3"
-panic-halt = "0.2"
+gc9a01a = "0.1.1"
+# embedded-graphics 0.7
+embedded-graphics = "0.7.1"
+
+# st7789 0.7.0 for e-g 0.7, with the "graphics" feature
+st7789 = { version = "0.7.0", features = ["graphics"] }
+
+# For the SPI display interface
 display-interface-spi = "0.4"
-st7789 = "0.6"
-cortex-m = "0.7"
+
+# Etc.
+panic-halt = "0.2"
+fugit = "0.3"
 cortex-m-rt = "0.7"
-critical-section = "1.2"
-rp2040-hal = { version = "0.9.2", features = ["critical-section-impl"] }
-rp2040-boot2 = "0.2"  # or the latest version available
+cortex-m = "0.7"
