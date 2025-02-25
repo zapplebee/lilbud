@@ -6,7 +6,6 @@ pub struct Point {
     pub y: i32,
 }
 
-
 #[derive(Debug, Clone, Copy)]
 pub struct PointMap {
     pub a: Point,
@@ -58,9 +57,6 @@ impl<'a> IntoIterator for &'a PointMap {
         .into_iter()
     }
 }
-
-
-
 
 pub const POINT_MAP_LIST: [PointMap; 103] = [
     PointMap {
@@ -2122,14 +2118,11 @@ pub const POINT_MAP_LIST: [PointMap; 103] = [
         p: Point { x: 133, y: 126 },
         q: Point { x: 110, y: 110 },
         r: Point { x: 133, y: 109 },
-    }
+    },
 ];
 
-
-pub fn get_random_face (
- ) -> PointMap{
-
-    let face = POINT_MAP_LIST[16];
+pub fn get_random_face() -> PointMap {
+    let face = POINT_MAP_LIST[80];
 
     face
 }

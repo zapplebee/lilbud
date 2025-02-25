@@ -1,14 +1,12 @@
 #![no_std]
 #![no_main]
 
-
-mod ui;
 mod get_faces;
+mod ui;
 
 use panic_halt as _;
 use rand_xorshift::XorShiftRng;
 use rp_pico as bsp;
-
 
 use bsp::entry;
 use fugit::RateExtU32;
@@ -18,14 +16,13 @@ use embedded_graphics::prelude::*;
 
 use rand_core::SeedableRng;
 
-
 use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
     gpio::FunctionSpi,
-    Spi,
     pac, pwm,
     sio::Sio,
     watchdog::Watchdog,
+    Spi,
 };
 
 #[entry]
@@ -100,7 +97,6 @@ fn main() -> ! {
     // Initialize registers
     display.initialize(&mut delay).unwrap();
 
-
     loop {
         let buffer = ui::draw_ui(&mut rng);
         let _ = display.draw_iter(buffer.iter().enumerate().map(|(i, &color)| {
@@ -108,6 +104,5 @@ fn main() -> ! {
             let y = (i / 240 as usize) as i32;
             Pixel(Point::new(x, y), color)
         }));
-        
     }
 }
