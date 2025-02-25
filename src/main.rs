@@ -2,6 +2,7 @@
 #![no_main]
 
 mod get_faces;
+// mod sensors;
 mod ui;
 
 use panic_halt as _;
@@ -96,13 +97,13 @@ fn main() -> ! {
     display.set_backlight(55000);
     // Initialize registers
     display.initialize(&mut delay).unwrap();
+    let mut sensors = sensor_mod::init().unwrap();
+    let (acc, gyro) = sensors.read().unwrap();
 
     loop {
         let buffer = ui::draw_ui(&mut rng);
-        let _ = display.draw_iter(buffer.iter().enumerate().map(|(i, &color)| {
-            let x = (i % 240 as usize) as i32;
-            let y = (i / 240 as usize) as i32;
-            Pixel(Point::new(x, y), color)
-        }));
+        let area = Rectangle::new(Point::zero(), Size::new(240, 240)); // Full-screen update
+
+        let _ = display.fill_contiguous(&area, buffer.iter().copied());
     }
 }
