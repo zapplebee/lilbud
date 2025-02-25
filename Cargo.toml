@@ -1,24 +1,19 @@
 [package]
-name = "simple_lcd"
+name = "lilbud"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# RP2040 / HAL stuff
-rp-pico = "0.9"
-embedded-hal = "0.2"
-gc9a01a = "0.1.1"
-# embedded-graphics 0.7
-embedded-graphics = "0.7.1"
-
-# st7789 0.7.0 for e-g 0.7, with the "graphics" feature
-st7789 = { version = "0.7.0", features = ["graphics"] }
-
-# For the SPI display interface
-display-interface-spi = "0.4"
-
-# Etc.
-panic-halt = "0.2"
-fugit = "0.3"
-cortex-m-rt = "0.7"
+embedded-hal = { version = "0.2.7", features = ["unproven"] }
+display-interface-spi = "0.4.1"
 cortex-m = "0.7"
+cortex-m-rt = "0.7"
+panic-halt = "0.2"
+embedded-graphics = "0.8.0"
+rp-pico = "0.9"
+fugit = "0.3"
+gc9a01a = "0.1.1"
+heapless = "0.8.0"
+rand = { version = "0.8", default-features = false }
+rand_xorshift = "0.3"
+rand_core = { version = "0.6", default-features = false }
