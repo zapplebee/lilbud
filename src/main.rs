@@ -2,7 +2,6 @@
 #![no_main]
 
 mod get_faces;
-// mod sensors;
 mod ui;
 
 use panic_halt as _;
@@ -13,7 +12,7 @@ use bsp::entry;
 use fugit::RateExtU32;
 
 use display_interface_spi::SPIInterface;
-use embedded_graphics::prelude::*;
+use embedded_graphics::{prelude::*, primitives::Rectangle};
 
 use rand_core::SeedableRng;
 
@@ -97,13 +96,10 @@ fn main() -> ! {
     display.set_backlight(55000);
     // Initialize registers
     display.initialize(&mut delay).unwrap();
-    let mut sensors = sensor_mod::init().unwrap();
-    let (acc, gyro) = sensors.read().unwrap();
+    let area = Rectangle::new(Point::zero(), Size::new(240, 240));
 
     loop {
         let buffer = ui::draw_ui(&mut rng);
-        let area = Rectangle::new(Point::zero(), Size::new(240, 240)); // Full-screen update
-
         let _ = display.fill_contiguous(&area, buffer.iter().copied());
     }
 }

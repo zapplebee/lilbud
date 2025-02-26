@@ -8,33 +8,30 @@ use embedded_graphics::primitives::{
     Circle, Polyline, PrimitiveStyle, PrimitiveStyleBuilder, Triangle,
 };
 
+use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyle};
+use embedded_graphics::text::Text;
+
 static WIDTH: i32 = 240;
 static HEIGHT: i32 = 240;
 
-use crate::get_faces::{get_random_face, PointMap};
-
-use heapless::FnvIndexMap;
+use crate::get_faces::{self, PointCollection};
 
 /// Renders the UI into a pixel buffer.
 /// This function expects a mutable RNG reference for randomness.
 pub fn draw_ui<R: Rng>(rng: &mut R) -> [Rgb565; (WIDTH as usize) * (HEIGHT as usize)] {
-    let mut buffer = [Rgb565::CSS_BLACK; (WIDTH as usize) * (HEIGHT as usize)];
+    let mut buffer = [Rgb565::CSS_DODGER_BLUE; (WIDTH as usize) * (HEIGHT as usize)];
 
-    let face: PointMap = get_random_face();
+    let face_2: PointCollection = get_faces::get_random_face(&mut *rng);
+    let mut points_2 = [Point { x: 0, y: 0 }; 18];
 
-    let mut points: FnvIndexMap<&str, Point, 32> = FnvIndexMap::new();
-
-    for (key, val) in face.into_iter() {
-        points
-            .insert(
-                key,
-                Point::new(val.x + rng.gen_range(1..=5), val.y + rng.gen_range(1..=5)),
-            )
-            .ok(); // Ignore potential insert failure if the map is full
+    for (i, point) in face_2.points.iter().enumerate() {
+        points_2[i] = Point::new(
+            point.x + rng.gen_range(1..=5),
+            point.y + rng.gen_range(1..=5),
+        );
     }
 
     let mut fb = Framebuffer::new(&mut buffer);
-    fb.clear(Rgb565::BLUE).unwrap();
 
     // Generate secondary random offsets.
     let secondary_points = [
@@ -46,30 +43,30 @@ pub fn draw_ui<R: Rng>(rng: &mut R) -> [Rgb565; (WIDTH as usize) * (HEIGHT as us
 
     // Draw triangles with a purple fill.
     Triangle::new(
-        points["a"] + secondary_points[0],
-        points["b"] + secondary_points[1],
-        points["c"] + secondary_points[2],
+        points_2[0] + secondary_points[0],
+        points_2[1] + secondary_points[1],
+        points_2[2] + secondary_points[2],
     )
     .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_PURPLE))
     .draw(&mut fb)
     .unwrap();
 
     Triangle::new(
-        points["c"] + secondary_points[2],
-        points["d"] + secondary_points[3],
-        points["a"] + secondary_points[0],
+        points_2[2] + secondary_points[2],
+        points_2[3] + secondary_points[3],
+        points_2[0] + secondary_points[0],
     )
     .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_PURPLE))
     .draw(&mut fb)
     .unwrap();
 
     // Draw additional background triangles in green.
-    Triangle::new(points["a"], points["b"], points["c"])
+    Triangle::new(points_2[0], points_2[1], points_2[2])
         .into_styled(PrimitiveStyle::with_fill(Rgb565::GREEN))
         .draw(&mut fb)
         .unwrap();
 
-    Triangle::new(points["c"], points["d"], points["a"])
+    Triangle::new(points_2[2], points_2[3], points_2[0])
         .into_styled(PrimitiveStyle::with_fill(Rgb565::GREEN))
         .draw(&mut fb)
         .unwrap();
@@ -81,33 +78,33 @@ pub fn draw_ui<R: Rng>(rng: &mut R) -> [Rgb565; (WIDTH as usize) * (HEIGHT as us
         .build();
 
     // Draw facial feature lines.
-    Polyline::new(&[points["e"], points["f"]])
+    Polyline::new(&[points_2[4], points_2[5]])
         .into_styled(line_style)
         .draw(&mut fb)
         .unwrap();
-    Polyline::new(&[points["g"], points["h"]])
+    Polyline::new(&[points_2[6], points_2[7]])
         .into_styled(line_style)
         .draw(&mut fb)
         .unwrap();
-    Polyline::new(&[points["i"], points["j"]])
+    Polyline::new(&[points_2[8], points_2[9]])
         .into_styled(line_style)
         .draw(&mut fb)
         .unwrap();
-    Polyline::new(&[points["k"], points["l"]])
+    Polyline::new(&[points_2[10], points_2[11]])
         .into_styled(line_style)
         .draw(&mut fb)
         .unwrap();
-    Polyline::new(&[points["m"], points["n"]])
+    Polyline::new(&[points_2[12], points_2[13]])
         .into_styled(line_style)
         .draw(&mut fb)
         .unwrap();
-    Polyline::new(&[points["o"], points["p"]])
+    Polyline::new(&[points_2[14], points_2[15]])
         .into_styled(line_style)
         .draw(&mut fb)
         .unwrap();
 
     // Draw circles for additional facial features.
-    Circle::new(points["q"], 10)
+    Circle::new(points_2[16], 10)
         .into_styled(
             PrimitiveStyleBuilder::new()
                 .fill_color(Rgb565::BLACK)
@@ -115,12 +112,19 @@ pub fn draw_ui<R: Rng>(rng: &mut R) -> [Rgb565; (WIDTH as usize) * (HEIGHT as us
         )
         .draw(&mut fb)
         .unwrap();
-    Circle::new(points["r"], 10)
+    Circle::new(points_2[17], 10)
         .into_styled(
             PrimitiveStyleBuilder::new()
                 .fill_color(Rgb565::BLACK)
                 .build(),
         )
+        .draw(&mut fb)
+        .unwrap();
+
+    let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_DODGER_BLUE);
+
+    // Draw "Hello, world!" at position (10,10)
+    Text::new("aaaaa", Point::new(100, 100), text_style)
         .draw(&mut fb)
         .unwrap();
 
