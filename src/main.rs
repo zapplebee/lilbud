@@ -4,6 +4,8 @@
 mod get_faces;
 mod ui;
 
+use get_faces::{get_random_face, tween, PointCollection, POINT_COLLECTION_LIST};
+use heapless::Vec;
 use panic_halt as _;
 use rand_xorshift::XorShiftRng;
 use rp_pico as bsp;
@@ -14,6 +16,7 @@ use fugit::RateExtU32;
 use display_interface_spi::SPIInterface;
 use embedded_graphics::{prelude::*, primitives::Rectangle};
 
+use rand::Rng;
 use rand_core::SeedableRng;
 
 use bsp::hal::{
@@ -98,8 +101,24 @@ fn main() -> ! {
     display.initialize(&mut delay).unwrap();
     let area = Rectangle::new(Point::zero(), Size::new(240, 240));
 
+    let mut idle_face = POINT_COLLECTION_LIST[0];
+
+    let mut faces: Vec<PointCollection, 20> = Vec::new();
+
     loop {
-        let buffer = ui::draw_ui(&mut rng);
+        let mut next_face = idle_face;
+        if faces.len() > 0 {
+            next_face = faces.remove(0)
+        }
+        if rng.gen_range(0..5) == 0 && faces.len() == 0 {
+            let target_face = get_random_face(&mut rng);
+            let tween_frames = tween(next_face, target_face);
+            for i in 0..19 {
+                let _ = faces.push(tween_frames[i]);
+            }
+            idle_face = target_face;
+        }
+        let buffer = ui::draw_ui(&mut rng, next_face);
         let _ = display.fill_contiguous(&area, buffer.iter().copied());
     }
 }
