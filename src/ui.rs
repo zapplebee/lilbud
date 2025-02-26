@@ -14,14 +14,17 @@ use embedded_graphics::text::Text;
 static WIDTH: i32 = 240;
 static HEIGHT: i32 = 240;
 
-use crate::get_faces::{self, PointCollection};
+use crate::get_faces::PointCollection;
 
 /// Renders the UI into a pixel buffer.
 /// This function expects a mutable RNG reference for randomness.
-pub fn draw_ui<R: Rng>(rng: &mut R) -> [Rgb565; (WIDTH as usize) * (HEIGHT as usize)] {
+pub fn draw_ui<R: Rng>(
+    rng: &mut R,
+    next_face: PointCollection,
+) -> [Rgb565; (WIDTH as usize) * (HEIGHT as usize)] {
     let mut buffer = [Rgb565::CSS_DODGER_BLUE; (WIDTH as usize) * (HEIGHT as usize)];
 
-    let face_2: PointCollection = get_faces::get_random_face(&mut *rng);
+    let face_2: PointCollection = next_face;
     let mut points_2 = [Point { x: 0, y: 0 }; 18];
 
     for (i, point) in face_2.points.iter().enumerate() {
