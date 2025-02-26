@@ -2279,3 +2279,34 @@ pub fn get_random_face<T: Rng>(mut rng: T) -> PointCollection {
     let face: PointCollection = POINT_COLLECTION_LIST[i];
     face
 }
+
+#[derive(Copy, Clone)]
+struct Step {
+    x: f32,
+    y: f32,
+}
+
+pub fn tween(face_a: PointCollection, face_b: PointCollection) -> [PointCollection; 20] {
+    let mut r = [face_a; 20];
+
+    let mut steps = [Step { x: 0.0, y: 0.0 }; 18];
+
+    for i in 0..18 {
+        steps[i] = Step {
+            x: (face_b.points[i].x - face_a.points[i].x) as f32 / 20.0,
+            y: (face_b.points[i].y - face_a.points[i].y) as f32 / 20.0,
+        }
+    }
+
+    for i in 1..19 {
+        for j in 0..steps.len() {
+            r[i].points[j].x = (r[i].points[j].x as f32 + steps[j].x * i as f32) as i32;
+            r[i].points[j].y = (r[i].points[j].y as f32 + steps[j].y * i as f32) as i32;
+        }
+    }
+
+    r[19] = face_b;
+
+    r
+}
+
