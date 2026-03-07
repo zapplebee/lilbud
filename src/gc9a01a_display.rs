@@ -60,7 +60,6 @@ impl GC9A01ADisplay {
 
         bl.set_high().unwrap();
 
-        // Hardware reset: high → low → high, then CS permanently low
         rst.set_high().unwrap();
         delay.delay_ms(100);
         rst.set_low().unwrap();
@@ -76,7 +75,6 @@ impl GC9A01ADisplay {
         disp
     }
 
-    // CS stays permanently low; DC toggles to distinguish command vs data.
     fn cmd(&mut self, cmd: u8) {
         self.dc.set_low().unwrap();
         self.spi.write(&[cmd]).unwrap();
@@ -159,22 +157,20 @@ impl GC9A01ADisplay {
     /// Fill the entire display with a single RGB565 color.
     pub fn fill(&mut self, color: u16) {
         let pixel = [(color >> 8) as u8, color as u8];
-
-        self.cmd_data(0x2A, &[0x00, 0x00, 0x00, 0xEF]); // CASET 0..239
-        self.cmd_data(0x2B, &[0x00, 0x00, 0x00, 0xEF]); // RASET 0..239
-        self.cmd(0x2C);                                   // RAMWR
-
+        self.cmd_data(0x2A, &[0x00, 0x00, 0x00, 0xEF]);
+        self.cmd_data(0x2B, &[0x00, 0x00, 0x00, 0xEF]);
+        self.cmd(0x2C);
         self.dc.set_high().unwrap();
         for _ in 0..(WIDTH * HEIGHT) {
             self.spi.write(&pixel).unwrap();
         }
     }
 
-    /// Write the full 240x240 pre-encoded big-endian framebuffer in one SPI transfer.
+    /// Flush a pre-encoded big-endian framebuffer in one SPI write.
     pub fn flush(&mut self, buffer: &[u8; WIDTH * HEIGHT * 2]) {
-        self.cmd_data(0x2A, &[0x00, 0x00, 0x00, 0xEF]); // CASET 0..239
-        self.cmd_data(0x2B, &[0x00, 0x00, 0x00, 0xEF]); // RASET 0..239
-        self.cmd(0x2C);                                   // RAMWR
+        self.cmd_data(0x2A, &[0x00, 0x00, 0x00, 0xEF]);
+        self.cmd_data(0x2B, &[0x00, 0x00, 0x00, 0xEF]);
+        self.cmd(0x2C);
         self.dc.set_high().unwrap();
         self.spi.write(buffer).unwrap();
     }
