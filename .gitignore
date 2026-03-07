@@ -1,2 +1,4 @@
 /target
 /pkg
+.DS_Store
+/lilbud.uf2
