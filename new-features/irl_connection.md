@@ -129,6 +129,58 @@ No new crates needed — `rp2040-hal` already supports UART.
 
 ---
 
+## Could They Use Their USB-C Ports?
+
+The short answer is: not directly, and not symmetrically. Here's why, and what the workarounds look like.
+
+### Why direct USB-C peer-to-peer doesn't work
+
+The RP2040's USB controller is **device-only** — it has no host capability in hardware. USB requires one host and one device; you can't connect two USB devices to each other and have them talk. Additionally, the USB-C pins on the board (D+ and D−) connect to the RP2040's **dedicated USB hardware pins**, which are not GPIO and cannot be repurposed for UART or any other protocol without hardware modification.
+
+So a USB-C to USB-C cable between two boards would leave both sitting there as devices with nothing to host the connection.
+
+### Option 1: PIO USB host (asymmetric)
+
+The RP2040 has PIO (Programmable I/O) state machines that can bit-bang almost any protocol. The [`pio-usb`](https://github.com/sekigon-gonnoc/pio-usb) project implements a USB 1.1 full-speed host entirely in PIO, using two regular GPIO pins for D+ and D−.
+
+This means one board could designate two free GPIO pins as a PIO USB host port, and the other board presents as a USB CDC serial device on its hardware USB port. Connected via USB-C, they could exchange data.
+
+**Tradeoffs:**
+- The connection is asymmetric — one board is "host", the other is "device". Same firmware can't run on both.
+- PIO USB host consumes two PIO state machines and two GPIO, and requires careful timing.
+- Adds the `pio-usb` dependency and significant complexity.
+- The USB-C cable needs to correctly orient (a standard cable should work, but OTG detection via CC pins may need a pull resistor on the host side).
+- Doable, but it's a meaningful engineering lift.
+
+### Option 2: USB-C as a dumb connector (not recommended)
+
+USB-C is just a physical connector. In theory, you could ignore the USB protocol entirely and route arbitrary signals through the cable's pins. The SBU1 and SBU2 pins (Sideband Use) exist in full-featured USB-C cables and are designed for alternate-mode signaling — they're single-ended 3.3V-compatible lines that could carry UART.
+
+The problem: the Waveshare RP2040-LCD-1.28 almost certainly doesn't route SBU pins to any accessible pad, and the D+/D− lines go to dedicated RP2040 hardware pins that aren't usable as GPIO. You'd need to modify the board or design a custom PCB.
+
+Not worth it when GPIO0/GPIO1 are free and much simpler.
+
+### Option 3: Through a computer (relay)
+
+If both boards are plugged into the same computer (the dock scenario from `dock.md`), the host machine can relay messages between them over their individual USB CDC serial connections. Each board talks to the computer, the computer forwards state between them.
+
+This doesn't require any board-to-board wiring and works with the existing USB ports. The limitation is obvious: a computer has to be in the loop.
+
+### Verdict
+
+| Approach | Symmetric | Hardware changes | Complexity |
+|----------|-----------|-----------------|------------|
+| GPIO UART (GPIO0/1 + pogo pins) | Yes | Shell only | Low |
+| PIO USB host | No | None | High |
+| USB-C as dumb connector | Yes | Board mod required | Very high |
+| Computer relay | Yes | None | Medium (software) |
+
+**GPIO UART with a physical connector on the shell remains the best path for true board-to-board communication.** The USB-C ports are more useful as the dock interface to a computer (see `dock.md`) than as a peer-to-peer link.
+
+If the shell design ever has room for a second small port (even a 3.5mm TRRS jack — UART on tip/ring, GND on sleeve), that could be a cleaner user experience than exposed pogo pins while still being a simple GPIO UART underneath.
+
+---
+
 ## Open Questions
 
 - Which behavior mode (mirror, influence, complementary, greeting)?
