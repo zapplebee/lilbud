@@ -74,11 +74,15 @@ pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 #[cfg(feature = "embedded")]
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
-// Static framebuffer — keeps 115KB off the stack.
+// Two static framebuffers for double-buffering.
+// While one is being DMA'd to the display, the CPU draws into the other.
 #[cfg(feature = "embedded")]
-static mut FRAMEBUFFER: core::mem::MaybeUninit<
-    [u8; config::WIDTH * config::HEIGHT * 2],
-> = core::mem::MaybeUninit::uninit();
+static mut FRAMEBUFFER_A: core::mem::MaybeUninit<[u8; config::WIDTH * config::HEIGHT * 2]> =
+    core::mem::MaybeUninit::uninit();
+
+#[cfg(feature = "embedded")]
+static mut FRAMEBUFFER_B: core::mem::MaybeUninit<[u8; config::WIDTH * config::HEIGHT * 2]> =
+    core::mem::MaybeUninit::uninit();
 
 #[cfg(feature = "embedded")]
 #[cortex_m_rt::entry]
@@ -135,7 +139,20 @@ fn main() -> ! {
 
     let mut last_face_change = timer.get_counter();
 
+    // Double-buffer: raw pointers to two static framebuffers.
+    // Swap each frame: draw into one while DMA sends the other.
+    type Buf = [u8; config::WIDTH * config::HEIGHT * 2];
+    let mut draw_ptr: *mut Buf = unsafe { FRAMEBUFFER_A.as_mut_ptr() };
+    let mut send_ptr: *mut Buf = unsafe { FRAMEBUFFER_B.as_mut_ptr() };
+
+    // Prime the first draw buffer before entering the loop.
+    ui::tick();
+    ui::draw_ui(unsafe { &mut *draw_ptr });
+
     loop {
+        // Swap: last drawn becomes next sent, freed buffer becomes next draw target.
+        core::mem::swap(&mut draw_ptr, &mut send_ptr);
+
         let now = timer.get_counter();
         if now.checked_duration_since(last_face_change)
             .map(|d| d.to_secs() >= 3)
@@ -145,10 +162,12 @@ fn main() -> ! {
             last_face_change = now;
         }
 
+        // draw_ptr and send_ptr are always different buffers — no aliasing.
+        let draw: &mut Buf = unsafe { &mut *draw_ptr };
+        let send: &'static Buf = unsafe { &*(send_ptr as *const Buf) };
+
         ui::tick();
-        unsafe {
-            ui::draw_ui(FRAMEBUFFER.assume_init_mut());
-            display.flush(FRAMEBUFFER.assume_init_ref());
-        }
+        ui::draw_ui(draw);    // CPU draws next frame
+        display.flush(send);  // DMA sends current frame
     }
 }
