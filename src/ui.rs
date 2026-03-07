@@ -200,6 +200,10 @@ pub fn draw_ui(buffer: &mut [Rgb565; WIDTH * HEIGHT]) {
             .map(|(k, v)| (k.as_str(), Point::new(v.x + jxy.0, v.y + jxy.1)))
             .collect();
 
+        if !points.contains_key("a") {
+            return;
+        }
+
         let sp = state::jitter4();
         let shadow = sp.map(|(dx, dy)| Point::new(dx, dy));
 

@@ -8,8 +8,6 @@ use serde::{
 use core::fmt;
 
 // ── PointData ─────────────────────────────────────────────────────────────────
-// Custom deserializer written with plain serde visitors so it compiles under
-// both serde_json (desktop) and serde_json_core (embedded).
 
 #[derive(Debug, Clone)]
 pub struct PointData {
@@ -109,35 +107,16 @@ mod inner {
 }
 
 // ── Embedded ─────────────────────────────────────────────────────────────────
+// No serde at runtime — face data is pre-baked as static Rust arrays by gen_faces.py.
 
 #[cfg(feature = "embedded")]
 mod inner {
     use super::PointData;
-    use heapless::{FnvIndexMap, String, Vec};
+    use heapless::{FnvIndexMap, String};
     use portable_atomic::{AtomicU32, Ordering};
-    use serde::Deserialize;
 
-    // Point keys are single ASCII chars ("a".."r")
     pub type PointMap = FnvIndexMap<String<2>, PointData, 32>;
 
-    #[derive(Deserialize)]
-    struct LogLine<'a> {
-        #[serde(borrow)]
-        #[allow(dead_code)]
-        level: &'a str,
-        message: Message<'a>,
-    }
-
-    #[derive(Deserialize)]
-    struct Message<'a> {
-        #[allow(dead_code)]
-        #[serde(borrow)]
-        emo: &'a str,
-        points: PointMap,
-    }
-
-    static mut FACES: Vec<PointMap, 128> = Vec::new();
-    static FACE_COUNT: AtomicU32 = AtomicU32::new(0);
     static RNG: AtomicU32 = AtomicU32::new(0x1234_5678);
 
     pub fn seed_rng(seed: u32) {
@@ -151,22 +130,23 @@ mod inner {
         .unwrap()
     }
 
-    pub fn init() {
-        for line in include_str!(env!("FACE_FILE_PATH")).lines() {
-            if let Ok((log, _)) = serde_json_core::from_str::<LogLine>(line) {
-                unsafe { let _ = FACES.push(log.message.points); }
-            }
-        }
-        FACE_COUNT.store(unsafe { FACES.len() } as u32, Ordering::Relaxed);
-    }
+    // No-op on embedded — data is in face_data::FACE_DATA.
+    pub fn init() {}
 
     pub fn get_random_face() -> PointMap {
-        let count = FACE_COUNT.load(Ordering::Relaxed);
-        if count == 0 {
+        let data = crate::face_data::FACE_DATA;
+        if data.is_empty() {
             return PointMap::new();
         }
-        let idx = (lcg_next() % count) as usize;
-        unsafe { FACES[idx].clone() }
+        let idx = (lcg_next() % data.len() as u32) as usize;
+        let raw = &data[idx];
+        let mut map = PointMap::new();
+        for (i, key) in b"abcdefghijklmnopqr".iter().enumerate() {
+            let mut s = String::<2>::new();
+            s.push(*key as char).ok();
+            map.insert(s, PointData { x: raw[i].0, y: raw[i].1 }).ok();
+        }
+        map
     }
 }
 

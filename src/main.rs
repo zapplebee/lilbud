@@ -2,11 +2,12 @@
 #![cfg_attr(feature = "embedded", no_main)]
 
 mod config;
-
-#[cfg(feature = "desktop")]
 mod get_faces;
-#[cfg(feature = "desktop")]
 mod ui;
+
+#[cfg(feature = "embedded")]
+mod face_data;
+
 #[cfg(feature = "desktop")]
 mod sdl2_display;
 
@@ -74,6 +75,12 @@ pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 #[cfg(feature = "embedded")]
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
+// Static framebuffer — keeps 115KB off the stack.
+#[cfg(feature = "embedded")]
+static mut FRAMEBUFFER: core::mem::MaybeUninit<
+    [embedded_graphics::pixelcolor::Rgb565; config::WIDTH * config::HEIGHT],
+> = core::mem::MaybeUninit::uninit();
+
 #[cfg(feature = "embedded")]
 #[cortex_m_rt::entry]
 fn main() -> ! {
@@ -81,6 +88,7 @@ fn main() -> ! {
     use hal::clocks::Clock;
     use hal::gpio::FunctionSpi;
     use hal::pac;
+    use hal::Timer;
 
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
@@ -100,6 +108,7 @@ fn main() -> ! {
     .unwrap();
 
     let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+    let timer = Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
 
     let sio = hal::Sio::new(pac.SIO);
     let pins = hal::gpio::Pins::new(
@@ -122,8 +131,25 @@ fn main() -> ! {
         &mut delay,
     );
 
-    // RED in RGB565 = 0xF800
+    crate::get_faces::seed_rng(timer.get_counter().ticks() as u32);
+    ui::set_face();
+
+    let mut last_face_change = timer.get_counter();
+
     loop {
-        display.fill(0xF800);
+        let now = timer.get_counter();
+        if now.checked_duration_since(last_face_change)
+            .map(|d| d.to_secs() >= 3)
+            .unwrap_or(false)
+        {
+            ui::set_face();
+            last_face_change = now;
+        }
+
+        ui::tick();
+        unsafe {
+            ui::draw_ui(FRAMEBUFFER.assume_init_mut());
+            display.flush(FRAMEBUFFER.assume_init_ref());
+        }
     }
 }

@@ -179,9 +179,14 @@ impl GC9A01ADisplay {
         self.cmd(0x2C);                                   // RAMWR
 
         self.dc.set_high().unwrap();
-        for pixel in buffer {
-            let raw = pixel.into_storage();
-            self.spi.write(&[(raw >> 8) as u8, raw as u8]).unwrap();
+        let mut row = [0u8; WIDTH * 2];
+        for y in 0..HEIGHT {
+            for x in 0..WIDTH {
+                let raw = buffer[y * WIDTH + x].into_storage();
+                row[x * 2]     = (raw >> 8) as u8;
+                row[x * 2 + 1] = raw as u8;
+            }
+            self.spi.write(&row).unwrap();
         }
     }
 }
