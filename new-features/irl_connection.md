@@ -114,22 +114,129 @@ For a cabled variant, a 3.5mm TRRS jack falls into Option 1 (crossover in the ca
 
 ---
 
-### Connector
+### Signal quality requirements
 
-Since the boards live in a 3D printed shell, the connector needs to be accessible from the outside. Given the face-to-face geometry above:
+Before choosing a connector it's worth knowing how demanding UART actually is on the signal path — the answer is: not very.
 
-| Option | Pros | Cons |
-|--------|------|-------|
-| **Pogo pins, back face, center** | No cable, satisfying press-together, crossover from geometry | Shell must align precisely back-to-back |
-| **Pogo pins, edge** | Boards sit side by side | Need cable or mirrored shell routing |
-| **3-pin JST or similar** | Any cable works (with crossover cable made once) | Visible cable; cable must be custom |
-| **3.5mm TRRS jack** | Universal cable availability; could combine with audio section | Standard cable is straight; need crossover cable or software swap |
-| **Magnetic pogo connector** | Self-aligning, elegant | Expensive; harder to source in 3-pin form |
+At 9600 baud each bit lasts **~104 µs**. A signal only needs to settle to a valid logic level within roughly 10% of that window — about 10 µs. That is glacially slow by electronics standards. By comparison:
 
-The back-face pogo pin approach is best matched to the face-to-face snap interaction. The shell design needs:
-- A recessed flat region on the back face with 3 pogo pin positions, spaced far enough apart that partial contact (1 of 3) doesn't cause electrical trouble.
-- GND in the center position.
-- The two boards held flush and parallel when connected — a clip, slot, or magnetic catch keeps them together.
+- An RC time constant of 100 ns (1 kΩ contact resistance × 100 pF parasitic capacitance) is **100× faster than needed**.
+- The RP2040 GPIO input impedance is on the order of 100 kΩ, so even a contact resistance of 1 kΩ would cause less than 1% voltage drop at the receiver — well within the 0.8V–2.0V logic threshold window of 3.3V CMOS.
+- Current on a UART data line is essentially nothing — the transmitter drives into the receiver's high-impedance input. A few microamps. Any connector rated for 100 mA is overkill by four orders of magnitude.
+
+The upshot: **this connection is electrically trivial**. The challenge is entirely mechanical — making reliable, repeatable physical contact, not preserving signal integrity.
+
+Even if you ran the baud rate up to 115,200 (12× faster, bit period ~8.7 µs) or even 1 Mbps (bit period 1 µs), none of the connector types below would become a bottleneck at centimeter-scale cable lengths.
+
+**Hot-plug behavior** is also non-critical here. When connection is made mid-transmission, at worst one packet is corrupted — the checksum rejects it and the board waits for the next valid packet 100 ms later. No handshake, no connection setup, no damage.
+
+---
+
+### Connector options — purchasable off the shelf
+
+#### Magnetic pogo pin connectors
+
+The most purpose-built option for this use case. A ring magnet (or pair of magnets) provides both the holding force and the self-alignment, while spring-loaded pogo pins inside the magnetic ring make the electrical contacts. The two halves snap together and pull apart cleanly with no locking mechanism to fumble with.
+
+These are widely available from Chinese suppliers (AliExpress, LCSC, Aliexpress storefronts) and a few western distributors:
+
+| Variant | Pins | Typical pitch | Notes |
+|---------|------|--------------|-------|
+| Ring magnet + 3 center pins | 3 | 2–2.5 mm | Ideal match for TX/GND/RX |
+| Ring magnet + 4–6 center pins | 4–6 | 2 mm | More pins than needed, extra can be left unused |
+| Linear magnetic pogo strip | 2–8 | 2.54 mm | Bar-style, less self-aligning |
+
+Search terms: **"magnetic pogo pin connector 3 pin"**, **"magnetic charging connector 3 pin data"**, **"magnetic pogo connector wearable"**.
+
+The magnet handles alignment. The spring contact handles slight surface variation. Contact resistance on decent units is under 50 mΩ — which as established above is completely irrelevant, but speaks to build quality. Current ratings of 1–2 A per pin are standard. Cost: ~$2–8 for a mated pair depending on source.
+
+For the face-to-face back-of-shell geometry: one half of the connector is embedded in each shell. The magnets pull the backs together and the pogo pins make contact. No cable, no plug orientation to think about.
+
+**Shell design note**: the two magnetic halves need to be opposite polarity to attract. Because both boards are identical, the two shells are identical — which means the magnet polarity in the shell must be set during assembly (gluing the magnet in one orientation on shell A, and flipped on shell B). This is a one-time manufacturing choice and easy to document.
+
+---
+
+#### Individual pogo pins (DIY)
+
+If you want full control over spacing, depth, and pitch, individual pogo pins are the component-level option. They are spring-loaded pins that solder into a PCB hole or a through-hole in a 3D printed shell, and press against a flat copper pad on the mating surface.
+
+| Series | Outer diameter | Travel | Typical load | Source |
+|--------|---------------|--------|-------------|--------|
+| P75-B1 / P75-LM1 | 0.75 mm | 1.5 mm | 50–100 g | AliExpress, very cheap |
+| Mill-Max 0906-x | 1.27 mm | 2.5 mm | 100 g | Mouser, Digi-Key |
+| Harwin P70-xxx | 1.0 mm | 2.0 mm | 75 g | Mouser |
+
+The mating surface on the opposing shell needs a copper pad — either a bare PCB pad exposed through the shell, or a small brass insert/coin glued in. The 3D printed shell becomes the connector housing.
+
+Spacing: keep at least 2 mm edge-to-edge between pins to prevent accidental bridging. For TX/GND/RX on 2.54 mm (0.1 inch) pitch, total footprint is about 7.5 mm wide — compact enough to fit on the back of the shell easily.
+
+Cost: P75 series pogo pins run ~$0.05–$0.30 each in small quantities. Mill-Max equivalents are ~$1–2 each but better quality.
+
+---
+
+#### JST connectors (cabled)
+
+JST makes several connector series suited to this. All require a short custom cable but the connectors themselves are purchasable at any electronics distributor (Digi-Key, Mouser, LCSC, Adafruit).
+
+| Series | Pitch | Locking? | Notes |
+|--------|-------|----------|-------|
+| **JST-SH** | 1.0 mm | Yes (friction) | Tiny; used in small drones and wearables; 3-pin available |
+| **JST-PH** | 2.0 mm | Yes | Very common in hobby electronics, good for hand assembly |
+| **JST-XH** | 2.5 mm | Yes | Larger, easier to handle, used in RC battery connectors |
+| **JST-GH** | 1.25 mm | Yes | Used by Pixhawk/robotics ecosystem; very robust latch |
+
+JST-SH 3-pin is probably the right fit for something worn on a person — it's tiny, latching, and rated to survive hundreds of mating cycles. A mated connector pair and 3-wire pigtail can be sourced pre-made from Adafruit or SparkFun. The cable itself needs to be made with the crossover (TX↔RX swapped), or the software role-swap approach is used.
+
+---
+
+#### 3.5mm TRRS audio jack
+
+The most universally sourceable connector in this entire document. Every electronics supplier carries them, every audio cable aisle has compatible cables, and the shell cutout is a standard drill-and-ream 3.5 mm hole.
+
+As a pure UART carrier (not AFSK audio), the TRRS pins map:
+
+| TRRS pin | Signal |
+|----------|--------|
+| Tip (T) | TX |
+| Ring 1 (R1) | RX |
+| Ring 2 (R2) | unused (or second channel) |
+| Sleeve (S) | GND |
+
+A standard TRRS-to-TRRS cable is wired tip-to-tip, ring-to-ring — a straight connection. As discussed in the crossover section, that means TX-to-TX and RX-to-RX, which doesn't work for UART. The fix is either:
+- A custom crossover cable (TRS male on each end, tip of one wired to ring 1 of other)
+- The software role-swap approach at boot
+
+The advantage of TRRS is that it also enables the AFSK audio approach described later — the same physical connector carries both the UART-as-tones and the raw GPIO UART approaches. A board with a single 3.5mm jack could support both modes depending on firmware.
+
+TRS panel-mount jacks: ~$0.50–2 each. Available from CUI Devices, Kycon, Adam Tech at Digi-Key/Mouser, or cheap unbranded versions from AliExpress.
+
+---
+
+#### Spring finger / leaf spring contacts
+
+Used in game cartridges (Game Boy, DS), SIM card slots, and SD card sockets. A stamped metal leaf spring makes contact with a gold pad on the mating surface. These are available as individual surface-mount or through-hole components from TE Connectivity, Molex, and many others.
+
+The mating pad side is a bare gold or tin surface — could be a small copper strip glued into the 3D printed shell, or a tiny bit of PCB. Very low profile. Contact force is lighter than pogo pins so alignment matters more.
+
+This is the style of contact used in Nintendo's cartridge slots — reliable after thousands of cycles with zero maintenance. For a snap-together back-to-back case, three spring fingers on one shell pressing against three pads on the other shell could be very clean.
+
+Search: **"SMD spring contact"**, **"battery spring contact strip"**, **"PCB spring pin"** on Digi-Key. TE Connectivity 1-1437667 series is one reference.
+
+---
+
+### Comparison
+
+| Connector | Cable needed | Self-aligning | DIY friendly | Purchasable assembled | Approx cost |
+|-----------|-------------|--------------|-------------|----------------------|------------|
+| Magnetic pogo (ring) | No | Yes — magnet | No (shell embed) | Yes — AliExpress | $3–8/pair |
+| Individual pogo pins | No | No (shell guides alignment) | Yes | Yes (components) | $0.50–3 for 3 pins |
+| JST-SH 3-pin | Yes (custom crossover) | N/A | Yes | Yes (Adafruit, SparkFun) | $1–3/pair |
+| 3.5mm TRRS | Yes (standard or custom) | N/A | Yes | Everywhere | $0.50–2 each |
+| Leaf spring contacts | No | No (shell guides) | Medium | Yes (Digi-Key) | $0.50–2 each |
+
+**For face-to-face snapping with no cable**: magnetic pogo connector or individual pogo pins + shell alignment ribs. The magnetic option handles alignment for free; individual pins are cheaper and give more control over spacing.
+
+**For a cabled approach**: JST-SH is the cleanest, or TRRS if you want the cable to be something any person could find in a drawer.
 
 ### Detection
 
