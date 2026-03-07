@@ -7,6 +7,7 @@ edition = "2021"
 default = ["desktop"]
 desktop  = ["dep:sdl2", "dep:rand"]
 wasm     = ["dep:wasm-bindgen", "dep:web-sys", "dep:js-sys", "dep:rand", "dep:getrandom"]
+webview  = ["dep:wry"]
 embedded = ["dep:cortex-m", "dep:cortex-m-rt", "dep:panic-halt", "dep:rp2040-hal", "dep:rp2040-boot2", "dep:embedded-hal", "dep:embedded-hal-1", "dep:portable-atomic", "dep:serde-json-core"]
 
 [dependencies]
@@ -16,6 +17,9 @@ heapless = "0.8"
 # Desktop only
 sdl2 = { version = "0.35", optional = true }
 rand = { version = "0.8", optional = true }
+
+# WebView only
+wry = { version = "0.24", optional = true }
 
 # WASM only
 wasm-bindgen = { version = "=0.2.92", optional = true }
