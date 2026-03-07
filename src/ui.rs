@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Mutex, OnceLock};
-
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::geometry::{OriginDimensions, Point, Size};
 use embedded_graphics::pixelcolor::Rgb565;
@@ -9,188 +5,11 @@ use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{
     Circle, Polyline, PrimitiveStyle, PrimitiveStyleBuilder, Triangle,
 };
-use rand::Rng;
 
 use crate::config::{HEIGHT, WIDTH};
-use crate::get_faces::{get_random_face, PointData};
+use crate::get_faces::{get_random_face, PointMap};
 
-static TICK_STATE: OnceLock<AtomicU32> = OnceLock::new();
-static FACE: OnceLock<Mutex<HashMap<String, PointData>>> = OnceLock::new();
-static TARGET_FACE: OnceLock<Mutex<HashMap<String, PointData>>> = OnceLock::new();
-
-pub fn set_face() {
-    let mutex_face = TARGET_FACE.get_or_init(|| Mutex::new(get_random_face()));
-    let mut face = mutex_face.lock().unwrap();
-    *face = get_random_face();
-}
-
-
-
-
-/// ✅ Atomically increment tick count and wrap at 56
-pub fn tick() {
-    let tick_state = TICK_STATE.get_or_init(|| AtomicU32::new(0));
-
-    let current_face_mutex = FACE.get_or_init(|| Mutex::new(get_random_face()));
-    let target_face_mutex = TARGET_FACE.get_or_init(|| Mutex::new(get_random_face()));
-
-    let current_face = current_face_mutex.lock().unwrap();
-    let target_face = target_face_mutex.lock().unwrap();
-
-    let new_face: HashMap<String, PointData> = current_face
-        .iter()
-        .filter_map(|(key, val)| {
-            target_face.get(key).map(|target_val| {
-
-                let new_x = interpolate(val.x, target_val.x, 2); // Move by 2 pixels per tick
-                let new_y = interpolate(val.y, target_val.y, 2);
-
-                (key.clone(), PointData { x: new_x, y: new_y })
-            })
-        })
-        .collect();
-
-        drop(current_face); // ✅ Release lock before modifying
-
-    // ✅ Overwrite the mutex-protected HashMap safely
-    {
-        let mut current_face = current_face_mutex.lock().unwrap();
-        *current_face = new_face; // ✅ Replace the old HashMap with the new one
-    }
-
-    tick_state
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |val| {
-            Some((val + 1) % 128)
-        })
-        .ok();
-}
-
-fn get_tick_state() -> u32 {
-    TICK_STATE
-        .get_or_init(|| AtomicU32::new(0))
-        .load(Ordering::Relaxed)
-}
-
-fn interpolate(start: i32, target: i32, step: i32) -> i32 {
-    if start < target {
-        (start + step).min(target) // Move up, but don’t overshoot
-    } else if start > target {
-        (start - step).max(target) // Move down, but don’t overshoot
-    } else {
-        start // Already at target
-    }
-}
-
-/// Function to render UI into a pixel buffer
-pub fn draw_ui() -> [Rgb565; 57600] {
-    let tick_state = get_tick_state();
-    print!("{:?}\n", tick_state);
-    let mut buffer = [Rgb565::CSS_BLACK; WIDTH * HEIGHT];
-    let face_1 = FACE.get_or_init(|| Mutex::new(get_random_face())).lock().unwrap();
-    let mut rng = rand::thread_rng();
-    let mut fb = Framebuffer::new(&mut buffer);
-
-    // Clear screen to black
-    fb.clear(Rgb565::BLUE).unwrap();
-
-    // Convert points to embedded-graphics Points
-    let points: std::collections::HashMap<&str, Point> = face_1
-        .iter()
-        .map(|(key, val)| {
-            (
-                key.as_str(),
-                Point::new(val.x + rng.gen_range(1..=5), val.y + rng.gen_range(1..=5)),
-            )
-        })
-        .collect();
-
-    // create secondary background. it ineeds to get painted first so that the face is on top
-
-    // create the points first so that the randomization is consistent
-
-    let secondary_points = [
-        Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
-        Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
-        Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
-        Point::new(rng.gen_range(-10..=10), rng.gen_range(-10..=10)),
-    ];
-    Triangle::new(
-        points["a"] + secondary_points[0],
-        points["b"] + secondary_points[1],
-        points["c"] + secondary_points[2],
-    )
-    .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_PURPLE))
-    .draw(&mut fb)
-    .unwrap();
-
-    Triangle::new(
-        points["c"] + secondary_points[2],
-        points["d"] + secondary_points[3],
-        points["a"] + secondary_points[0],
-    )
-    .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_PURPLE))
-    .draw(&mut fb)
-    .unwrap();
-
-    // create a secondary background
-
-    Triangle::new(points["a"], points["b"], points["c"])
-        .into_styled(PrimitiveStyle::with_fill(Rgb565::GREEN))
-        .draw(&mut fb)
-        .unwrap();
-
-    Triangle::new(points["c"], points["d"], points["a"])
-        .into_styled(PrimitiveStyle::with_fill(Rgb565::GREEN))
-        .draw(&mut fb)
-        .unwrap();
-
-    let line_style = PrimitiveStyleBuilder::new()
-        .stroke_color(Rgb565::BLACK)
-        .stroke_width(2)
-        .build();
-    // left eye
-    Polyline::new(&[points["e"], points["f"]])
-        .into_styled(line_style)
-        .draw(&mut fb)
-        .unwrap();
-    Polyline::new(&[points["g"], points["h"]])
-        .into_styled(line_style)
-        .draw(&mut fb)
-        .unwrap();
-    Polyline::new(&[points["i"], points["j"]])
-        .into_styled(line_style)
-        .draw(&mut fb)
-        .unwrap();
-    Polyline::new(&[points["k"], points["l"]])
-        .into_styled(line_style)
-        .draw(&mut fb)
-        .unwrap();
-    Polyline::new(&[points["m"], points["n"]])
-        .into_styled(line_style)
-        .draw(&mut fb)
-        .unwrap();
-    Polyline::new(&[points["o"], points["p"]])
-        .into_styled(line_style)
-        .draw(&mut fb)
-        .unwrap();
-    Circle::new(points["q"], 10)
-        .into_styled(
-            PrimitiveStyleBuilder::new()
-                .fill_color(Rgb565::BLACK)
-                .build(),
-        )
-        .draw(&mut fb)
-        .unwrap();
-    Circle::new(points["r"], 10)
-        .into_styled(
-            PrimitiveStyleBuilder::new()
-                .fill_color(Rgb565::BLACK)
-                .build(),
-        )
-        .draw(&mut fb)
-        .unwrap();
-    buffer
-}
+// ── Framebuffer (shared) ──────────────────────────────────────────────────────
 
 pub struct Framebuffer<'a> {
     buffer: &'a mut [Rgb565; WIDTH * HEIGHT],
@@ -212,8 +31,7 @@ impl<'a> DrawTarget for Framebuffer<'a> {
     {
         for Pixel(coord, color) in pixels {
             if coord.x >= 0 && coord.x < WIDTH as i32 && coord.y >= 0 && coord.y < HEIGHT as i32 {
-                let index = (coord.y as usize * WIDTH) + coord.x as usize;
-                self.buffer[index] = color;
+                self.buffer[(coord.y as usize * WIDTH) + coord.x as usize] = color;
             }
         }
         Ok(())
@@ -224,4 +42,200 @@ impl<'a> OriginDimensions for Framebuffer<'a> {
     fn size(&self) -> Size {
         Size::new(WIDTH as u32, HEIGHT as u32)
     }
+}
+
+// ── Desktop UI state ──────────────────────────────────────────────────────────
+
+#[cfg(feature = "desktop")]
+mod state {
+    use super::{get_random_face, PointMap};
+    use crate::get_faces::PointData;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::{Mutex, OnceLock};
+
+    static TICK: OnceLock<AtomicU32> = OnceLock::new();
+    static FACE: OnceLock<Mutex<PointMap>> = OnceLock::new();
+    static TARGET: OnceLock<Mutex<PointMap>> = OnceLock::new();
+
+    pub fn set_face() {
+        let mut t = TARGET.get_or_init(|| Mutex::new(get_random_face())).lock().unwrap();
+        *t = get_random_face();
+    }
+
+    pub fn tick() {
+        let tick = TICK.get_or_init(|| AtomicU32::new(0));
+        let face_mx = FACE.get_or_init(|| Mutex::new(get_random_face()));
+        let target_mx = TARGET.get_or_init(|| Mutex::new(get_random_face()));
+
+        let new_face: PointMap = {
+            let face = face_mx.lock().unwrap();
+            let target = target_mx.lock().unwrap();
+            face.iter()
+                .filter_map(|(k, v)| {
+                    target.get(k).map(|tv| {
+                        (k.clone(), PointData {
+                            x: interp(v.x, tv.x, 2),
+                            y: interp(v.y, tv.y, 2),
+                        })
+                    })
+                })
+                .collect()
+        };
+
+        *face_mx.lock().unwrap() = new_face;
+        tick.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| Some((v + 1) % 128)).ok();
+    }
+
+    pub fn with_face<F: FnOnce(&PointMap)>(f: F) {
+        let face = FACE.get_or_init(|| Mutex::new(get_random_face())).lock().unwrap();
+        f(&face);
+    }
+
+    pub fn jitter() -> (i32, i32) {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        (rng.gen_range(1..=5), rng.gen_range(1..=5))
+    }
+
+    pub fn jitter4() -> [(i32, i32); 4] {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        core::array::from_fn(|_| (rng.gen_range(-10..=10), rng.gen_range(-10..=10)))
+    }
+
+    fn interp(start: i32, target: i32, step: i32) -> i32 {
+        if start < target { (start + step).min(target) }
+        else if start > target { (start - step).max(target) }
+        else { start }
+    }
+}
+
+// ── Embedded UI state ─────────────────────────────────────────────────────────
+
+#[cfg(feature = "embedded")]
+mod state {
+    use super::{get_random_face, PointMap};
+    use portable_atomic::{AtomicU32, Ordering};
+
+    static TICK: AtomicU32 = AtomicU32::new(0);
+    static mut FACE: Option<PointMap> = None;
+    static mut TARGET: Option<PointMap> = None;
+
+    // Simple LCG — shared with get_faces via the same atomic (jitter only needs weak randomness)
+    static JITTER_RNG: AtomicU32 = AtomicU32::new(0xDEAD_BEEF);
+
+    fn jitter_next() -> i32 {
+        (JITTER_RNG
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |s| {
+                Some(s.wrapping_mul(1_664_525).wrapping_add(1_013_904_223))
+            })
+            .unwrap()
+            >> 16) as i16 as i32
+    }
+
+    pub fn set_face() {
+        unsafe { TARGET = Some(get_random_face()); }
+    }
+
+    pub fn tick() {
+        unsafe {
+            let face = FACE.get_or_insert_with(get_random_face);
+            let target = TARGET.get_or_insert_with(get_random_face);
+            for (k, v) in face.iter_mut() {
+                if let Some(tv) = target.get(k) {
+                    v.x = interp(v.x, tv.x, 2);
+                    v.y = interp(v.y, tv.y, 2);
+                }
+            }
+        }
+        TICK.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| Some((v + 1) % 128)).ok();
+    }
+
+    pub fn with_face<F: FnOnce(&PointMap)>(f: F) {
+        unsafe {
+            let face = FACE.get_or_insert_with(get_random_face);
+            f(face);
+        }
+    }
+
+    pub fn jitter() -> (i32, i32) {
+        let a = (jitter_next().abs() % 5) + 1;
+        let b = (jitter_next().abs() % 5) + 1;
+        (a, b)
+    }
+
+    pub fn jitter4() -> [(i32, i32); 4] {
+        core::array::from_fn(|_| {
+            let a = jitter_next() % 10;
+            let b = jitter_next() % 10;
+            (a, b)
+        })
+    }
+
+    fn interp(start: i32, target: i32, step: i32) -> i32 {
+        if start < target { (start + step).min(target) }
+        else if start > target { (start - step).max(target) }
+        else { start }
+    }
+}
+
+// ── Public API (both targets) ─────────────────────────────────────────────────
+
+pub fn set_face() {
+    state::set_face();
+}
+
+pub fn tick() {
+    state::tick();
+}
+
+pub fn draw_ui(buffer: &mut [Rgb565; WIDTH * HEIGHT]) {
+    let mut fb = Framebuffer::new(buffer);
+    fb.clear(Rgb565::BLUE).unwrap();
+
+    state::with_face(|face| {
+        let jxy = state::jitter();
+        let points: heapless::FnvIndexMap<&str, Point, 32> = face
+            .iter()
+            .map(|(k, v)| (k.as_str(), Point::new(v.x + jxy.0, v.y + jxy.1)))
+            .collect();
+
+        let sp = state::jitter4();
+        let shadow = sp.map(|(dx, dy)| Point::new(dx, dy));
+
+        let line_style = PrimitiveStyleBuilder::new()
+            .stroke_color(Rgb565::BLACK)
+            .stroke_width(2)
+            .build();
+
+        // Shadow head
+        Triangle::new(points["a"] + shadow[0], points["b"] + shadow[1], points["c"] + shadow[2])
+            .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_PURPLE))
+            .draw(&mut fb).unwrap();
+        Triangle::new(points["c"] + shadow[2], points["d"] + shadow[3], points["a"] + shadow[0])
+            .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_PURPLE))
+            .draw(&mut fb).unwrap();
+
+        // Head
+        Triangle::new(points["a"], points["b"], points["c"])
+            .into_styled(PrimitiveStyle::with_fill(Rgb565::GREEN))
+            .draw(&mut fb).unwrap();
+        Triangle::new(points["c"], points["d"], points["a"])
+            .into_styled(PrimitiveStyle::with_fill(Rgb565::GREEN))
+            .draw(&mut fb).unwrap();
+
+        // Face lines
+        for [p, q] in [["e","f"],["g","h"],["i","j"],["k","l"],["m","n"],["o","p"]] {
+            Polyline::new(&[points[p], points[q]])
+                .into_styled(line_style)
+                .draw(&mut fb).unwrap();
+        }
+
+        // Eyes
+        for eye in ["q", "r"] {
+            Circle::new(points[eye], 10)
+                .into_styled(PrimitiveStyleBuilder::new().fill_color(Rgb565::BLACK).build())
+                .draw(&mut fb).unwrap();
+        }
+    });
 }
