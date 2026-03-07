@@ -12,26 +12,124 @@ The display uses SPI1 (GPIO8–12, GPIO25). The RP2040 has plenty of free GPIO. 
 
 | Signal | GPIO | Notes |
 |--------|------|-------|
-| TX     | 0    | Board A transmit → Board B receive |
-| RX     | 1    | Board B transmit → Board A receive |
+| TX     | 0    | This board's transmit out |
+| RX     | 1    | This board's receive in |
 | GND    | GND  | Common ground — required |
 
-Three wires total. Full-duplex. No clock line needed.
+Three wires total. Full-duplex. No clock line needed. Both boards run identical firmware.
 
-Both boards run the same firmware — each listens on RX and talks on TX. The connection is symmetric.
+---
+
+### The crossover problem
+
+This is the central case-design question. UART is not symmetric: **TX must connect to RX, not to TX**. A board's transmitter has to feed the other board's receiver. GND connects to GND. So the correct wiring is:
+
+```
+Board A           Board B
+  TX  ──────────►  RX
+  GND ────────────  GND
+  RX  ◄──────────  TX
+```
+
+That's **A_TX → B_RX, GND → GND, A_RX ← B_TX** — a crossover. If you wire it straight (TX-TX, GND-GND, RX-RX), both transmitters are shouting at each other's transmitters and neither receiver hears anything. The crossover is non-negotiable for UART.
+
+The question you're really asking: **where does the crossover live — in the cable, or in the case geometry?**
+
+---
+
+### Option 1: Crossover in the cable, identical connectors
+
+Both boards have the same connector wired the same way — say, left-to-right: `[TX | GND | RX]`. The cable itself swaps pin 1 and pin 3:
+
+```
+Board A connector        cable          Board B connector
+  pin 1 (TX) ──────────────────────►  pin 3 (RX)
+  pin 2 (GND) ────────────────────── pin 2 (GND)
+  pin 3 (RX) ◄──────────────────────  pin 1 (TX)
+```
+
+Both shells are identical and interchangeable. The cable is not. A 3-pin JST-style connector would work here but the cable must be made custom (or clearly labeled). A standard cable won't work; a naive cable swap breaks the connection silently.
+
+---
+
+### Option 2: Crossover in the geometry — face-to-face snap
+
+If two boards **face each other** to connect (screen facing screen, or back facing back), the physical mirror does the work. When you hold Board B up to Board A in the opposite orientation, left and right swap. If both connectors are `[TX | GND | RX]` left-to-right on their own face:
+
+```
+Board A face              Board B face (flipped, facing A)
+  [TX | GND | RX]    →    [RX | GND | TX]  ← as seen from A's perspective
+```
+
+When the connectors meet, TX-A lands on RX-B, GND on GND, RX-A on TX-B. The crossover is automatic. The cable is just a straight 1-1-2-2-3-3 connection, or pogo pins that contact directly with no cable at all.
+
+This is the most elegant solution for a case with pogo pins: **the act of pressing two boards together face-to-face performs the crossover**. The connector order is not arbitrary — it must be `[TX | GND | RX]` with GND in the center so that the mirror lands correctly.
+
+GND in the middle also has a practical safety benefit: even if the boards are only partially engaged (partially pressed together, slightly misaligned), GND connects first and last, so neither TX/RX line is floating across an unmatched pin during contact.
+
+---
+
+### Option 3: Crossover in the geometry — side-by-side, mirrored shells
+
+If boards sit side-by-side (both face forward, like two pins on a lanyard next to each other), there is no physical flip. The connectors on adjacent edges are in the same orientation. To get a crossover with a straight cable, the connector **pin order must differ between the two facing edges**:
+
+```
+Board A (right edge connector)    Board B (left edge connector)
+  [TX | GND | RX]          →      [RX | GND | TX]
+```
+
+But here's the problem: both boards run the same firmware and the same PCB. You can't have one board's right edge wired TX-GND-RX and the other board's left edge wired RX-GND-TX unless you route them differently in the shell — for example, pad extensions inside the shell that cross the wires before they hit the connector pads.
+
+This works but adds complexity to the shell's internal routing. Face-to-face (Option 2) achieves the same result for free from geometry alone.
+
+---
+
+### Option 4: Crossover in software — auto-detect and swap
+
+UART on the RP2040 is implemented through the PIO state machines as much as the hardware UART0 peripheral. In principle, you could assign GPIO 0 and 1 as either TX or RX based on detecting which role each board takes. One simple approach:
+
+- On boot, both boards listen on GPIO 1 (RX) and transmit nothing.
+- Simultaneously, both pulse GPIO 0 briefly.
+- If GPIO 1 goes high (received the other board's pulse), this board is in "A" role; if it doesn't, "B" role.
+- Roles determine which GPIO is TX and which is RX.
+
+With straight wiring (pin-to-pin, same orientation, no crossover), one board's GPIO 0 connects to the other board's GPIO 0. If board A transmits on GPIO 0 and board B receives on GPIO 0 — that works, even though it's not the conventional UART0 pinout. You're using GPIO 0 as RX on one board.
+
+This is doable on the RP2040 because UART0 can be mapped to alternate pins, and PIO UART has no fixed pin assignment at all. The tradeoff: it requires a role-negotiation phase at boot and slightly more complex firmware. The hardware is a dead-simple straight cable.
+
+---
+
+### Summary: which to choose
+
+| Approach | Cable | Connector | Shell complexity | Firmware complexity |
+|----------|-------|-----------|-----------------|---------------------|
+| Crossover cable | Custom | Identical | Low | None |
+| Face-to-face snap | Straight / none | Identical | Low — geometry does it | None |
+| Side-by-side mirrored | Straight | Same PCB, different routing | Medium | None |
+| Software role swap | Straight | Identical | Low | Low |
+
+**Face-to-face snapping (Option 2) is the best choice for pogo pins**: identical shells, no custom cable, no firmware logic, and the physical interaction — pressing two boards together — is the most satisfying and legible gesture. Place the connector on one flat face of the shell (e.g. the back), in the center, with pin order `[TX | GND | RX]` so the mirror lands correctly.
+
+For a cabled variant, a 3.5mm TRRS jack falls into Option 1 (crossover in the cable) or could be made to work with a standard cable using Option 4 (software role swap, detecting which end is which via the initial pulse exchange).
+
+---
 
 ### Connector
 
-Since the boards live in a 3D printed shell, the connector needs to be accessible from the outside. Options:
+Since the boards live in a 3D printed shell, the connector needs to be accessible from the outside. Given the face-to-face geometry above:
 
 | Option | Pros | Cons |
 |--------|------|-------|
-| **Exposed pogo pins on edge** | No plug/unplug wear, satisfying snap-together | Requires precise shell alignment |
-| **3-pin JST or similar** | Cheap, reliable, easy to cable | Visible cable between boards |
-| **Magnetic pogo connector** | Elegant, self-aligning | More expensive, harder to source |
-| **Direct solder bridge** | Permanent, zero connector cost | Not removable |
+| **Pogo pins, back face, center** | No cable, satisfying press-together, crossover from geometry | Shell must align precisely back-to-back |
+| **Pogo pins, edge** | Boards sit side by side | Need cable or mirrored shell routing |
+| **3-pin JST or similar** | Any cable works (with crossover cable made once) | Visible cable; cable must be custom |
+| **3.5mm TRRS jack** | Universal cable availability; could combine with audio section | Standard cable is straight; need crossover cable or software swap |
+| **Magnetic pogo connector** | Self-aligning, elegant | Expensive; harder to source in 3-pin form |
 
-Pogo pins or a small edge connector on the shell seem most fitting for a "two friends touching" interaction.
+The back-face pogo pin approach is best matched to the face-to-face snap interaction. The shell design needs:
+- A recessed flat region on the back face with 3 pogo pin positions, spaced far enough apart that partial contact (1 of 3) doesn't cause electrical trouble.
+- GND in the center position.
+- The two boards held flush and parallel when connected — a clip, slot, or magnetic catch keeps them together.
 
 ### Detection
 
