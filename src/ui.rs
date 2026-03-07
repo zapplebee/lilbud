@@ -60,9 +60,9 @@ impl<'a> OriginDimensions for Framebuffer<'a> {
     }
 }
 
-// ── Desktop UI state ──────────────────────────────────────────────────────────
+// ── Desktop / WASM UI state ───────────────────────────────────────────────────
 
-#[cfg(feature = "desktop")]
+#[cfg(any(feature = "desktop", feature = "wasm"))]
 mod state {
     use super::{get_random_face, PointMap};
     use crate::get_faces::PointData;
