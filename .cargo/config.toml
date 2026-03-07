@@ -1,0 +1,11 @@
+[build]
+# Default target for embedded builds.
+# For desktop: cargo build --target aarch64-apple-darwin --features desktop --no-default-features
+target = "thumbv6m-none-eabi"
+
+[target.thumbv6m-none-eabi]
+rustflags = [
+    "-C", "link-arg=--nmagic",
+    "-C", "link-arg=-Tlink.x",
+]
+runner = "elf2uf2-rs"
