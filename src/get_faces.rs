@@ -1,5 +1,5 @@
-#[cfg(not(any(feature = "desktop", feature = "embedded")))]
-compile_error!("Enable either the 'desktop' or 'embedded' feature.");
+#[cfg(not(any(feature = "desktop", feature = "wasm", feature = "embedded")))]
+compile_error!("Enable the 'desktop', 'wasm', or 'embedded' feature.");
 
 use serde::{
     de::{self, MapAccess, Visitor},
@@ -62,9 +62,9 @@ impl<'de> Deserialize<'de> for PointData {
     }
 }
 
-// ── Desktop ───────────────────────────────────────────────────────────────────
+// ── Desktop / WASM ────────────────────────────────────────────────────────────
 
-#[cfg(feature = "desktop")]
+#[cfg(any(feature = "desktop", feature = "wasm"))]
 mod inner {
     use super::PointData;
     use serde::Deserialize;

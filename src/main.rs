@@ -11,8 +11,27 @@ mod face_data;
 #[cfg(feature = "desktop")]
 mod sdl2_display;
 
+#[cfg(feature = "wasm")]
+mod wasm_display;
+
 #[cfg(feature = "embedded")]
 mod gc9a01a_display;
+
+// ── WASM entry point ──────────────────────────────────────────────────────────
+// #[wasm_bindgen(start)] exports `start` as the wasm start function.
+// Cargo still requires a `main` symbol for binary targets, so we provide a no-op.
+
+#[cfg(feature = "wasm")]
+use wasm_bindgen::prelude::*;
+
+#[cfg(feature = "wasm")]
+#[wasm_bindgen(start)]
+pub fn start() {
+    wasm_display::animate();
+}
+
+#[cfg(feature = "wasm")]
+fn main() {}
 
 // ── Desktop entry point ───────────────────────────────────────────────────────
 

@@ -1,13 +1,14 @@
 # Building & Flashing lilbud
 
-Two build targets:
+Three build targets:
 
 | Target | Feature flag | Use |
 |--------|-------------|-----|
-| **Desktop** (SDL2) | `desktop` | Preview and development — native window on your machine |
-| **Embedded** (RP2040) | `embedded` | Production — runs on the Waveshare RP2040-LCD-1.28 pin |
+| **Desktop** (SDL2) | `desktop` | Preview — native SDL2 window |
+| **WASM** (browser) | `wasm` | Preview — runs in any browser via Canvas 2D |
+| **Embedded** (RP2040) | `embedded` | Production — Waveshare RP2040-LCD-1.28 pin |
 
-The default Cargo target is `thumbv6m-none-eabi` (embedded). Desktop builds require passing the host target explicitly.
+The default Cargo target is `thumbv6m-none-eabi` (embedded). Desktop and WASM builds require passing the target explicitly.
 
 ---
 
@@ -35,6 +36,14 @@ brew install sdl2
 
 # Ubuntu / Debian
 sudo apt-get install libsdl2-dev
+```
+
+### wasm-bindgen CLI (WASM only)
+
+The `wasm-bindgen` CLI generates the JS glue that lets the browser load the `.wasm` file. Its version must match the `wasm-bindgen` crate version pinned in `Cargo.toml`:
+
+```sh
+cargo install wasm-bindgen-cli --version "=0.2.92" --locked
 ```
 
 ### probe-rs (optional — SWD flashing)
@@ -83,6 +92,57 @@ FACE_FILE_PATH=/path/to/lilbudmaker/lilbudz.ndjson \
 ```
 
 The `FACE_FILE_PATH` env var is read at compile time via `include_str!(env!("FACE_FILE_PATH"))` — it must be set for the build to succeed. It can point to either `faces.ndjson` (bundled) or a live `lilbudz.ndjson` from lilbudmaker.
+
+---
+
+## WASM Build
+
+The WASM target renders into a `<canvas id="canvas">` element using the Canvas 2D API, driven by `requestAnimationFrame`. Face data is embedded at compile time via `FACE_FILE_PATH` (same as desktop).
+
+### Prerequisites
+
+```sh
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version "=0.2.92" --locked
+```
+
+### 1. Build the WASM binary
+
+```sh
+FACE_FILE_PATH=/path/to/lilbudmaker/lilbudz.ndjson \
+  cargo build --release --target wasm32-unknown-unknown \
+  --no-default-features --features wasm
+```
+
+Or with the bundled faces:
+
+```sh
+FACE_FILE_PATH=$(pwd)/faces.ndjson \
+  cargo build --release --target wasm32-unknown-unknown \
+  --no-default-features --features wasm
+```
+
+### 2. Generate JS bindings
+
+```sh
+wasm-bindgen target/wasm32-unknown-unknown/release/lilbud.wasm \
+  --out-dir pkg --target web
+```
+
+This produces `pkg/lilbud.js` and `pkg/lilbud_bg.wasm`.
+
+### 3. Serve locally
+
+The browser requires a server (not `file://`) to load ES modules and `.wasm`:
+
+```sh
+# Python (no install needed)
+python3 -m http.server 8080
+
+# Then open: http://localhost:8080
+```
+
+The `index.html` at the repo root imports `./pkg/lilbud.js` and renders lilbud in a round `<canvas>` centered on the page.
 
 ---
 

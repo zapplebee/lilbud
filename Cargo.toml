@@ -5,7 +5,8 @@ edition = "2021"
 
 [features]
 default = ["desktop"]
-desktop = ["dep:sdl2", "dep:serde_json", "dep:rand"]
+desktop  = ["dep:sdl2", "dep:serde_json", "dep:rand"]
+wasm     = ["dep:wasm-bindgen", "dep:web-sys", "dep:js-sys", "dep:serde_json", "dep:rand", "dep:getrandom"]
 embedded = ["dep:cortex-m", "dep:cortex-m-rt", "dep:panic-halt", "dep:rp2040-hal", "dep:rp2040-boot2", "dep:embedded-hal", "dep:embedded-hal-1", "dep:portable-atomic", "dep:serde-json-core"]
 
 [dependencies]
@@ -17,6 +18,15 @@ serde = { version = "1.0", features = ["derive"], default-features = false }
 sdl2 = { version = "0.35", optional = true }
 serde_json = { version = "1.0", optional = true }
 rand = { version = "0.8", optional = true }
+
+# WASM only
+wasm-bindgen = { version = "=0.2.92", optional = true }
+web-sys = { version = "=0.3.69", optional = true, features = [
+    "Window", "Document", "HtmlCanvasElement",
+    "CanvasRenderingContext2d", "ImageData",
+] }
+js-sys = { version = "=0.3.69", optional = true }
+getrandom = { version = "0.2", features = ["js"], optional = true }
 
 # Embedded only
 cortex-m = { version = "0.7", features = ["critical-section-single-core"], optional = true }
