@@ -18,7 +18,6 @@ mod gc9a01a_display;
 
 #[cfg(feature = "desktop")]
 fn main() -> Result<(), String> {
-    use embedded_graphics::pixelcolor::Rgb565;
     use sdl2::event::Event;
     use sdl2::keyboard::Keycode;
     use sdl2_display::SDL2Display;
@@ -30,7 +29,7 @@ fn main() -> Result<(), String> {
     let mut display = SDL2Display::new(&video_subsystem);
 
     let mut last_face_change = Instant::now();
-    let mut buffer = [Rgb565::CSS_BLACK; config::WIDTH * config::HEIGHT];
+    let mut buffer = [0u8; config::WIDTH * config::HEIGHT * 2];
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -78,7 +77,7 @@ const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 // Static framebuffer — keeps 115KB off the stack.
 #[cfg(feature = "embedded")]
 static mut FRAMEBUFFER: core::mem::MaybeUninit<
-    [embedded_graphics::pixelcolor::Rgb565; config::WIDTH * config::HEIGHT],
+    [u8; config::WIDTH * config::HEIGHT * 2],
 > = core::mem::MaybeUninit::uninit();
 
 #[cfg(feature = "embedded")]

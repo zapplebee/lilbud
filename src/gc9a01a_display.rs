@@ -9,8 +9,6 @@
 //!   BL   = GPIO25  (backlight)
 
 use crate::config::{HEIGHT, WIDTH};
-use embedded_graphics::pixelcolor::Rgb565;
-use embedded_graphics::prelude::IntoStorage;
 use embedded_hal_1::digital::OutputPin;
 use embedded_hal_1::spi::SpiBus;
 use rp2040_hal as hal;
@@ -172,21 +170,12 @@ impl GC9A01ADisplay {
         }
     }
 
-    /// Write the full 240x240 Rgb565 framebuffer to the display.
-    pub fn flush(&mut self, buffer: &[Rgb565; WIDTH * HEIGHT]) {
+    /// Write the full 240x240 pre-encoded big-endian framebuffer in one SPI transfer.
+    pub fn flush(&mut self, buffer: &[u8; WIDTH * HEIGHT * 2]) {
         self.cmd_data(0x2A, &[0x00, 0x00, 0x00, 0xEF]); // CASET 0..239
         self.cmd_data(0x2B, &[0x00, 0x00, 0x00, 0xEF]); // RASET 0..239
         self.cmd(0x2C);                                   // RAMWR
-
         self.dc.set_high().unwrap();
-        let mut row = [0u8; WIDTH * 2];
-        for y in 0..HEIGHT {
-            for x in 0..WIDTH {
-                let raw = buffer[y * WIDTH + x].into_storage();
-                row[x * 2]     = (raw >> 8) as u8;
-                row[x * 2 + 1] = raw as u8;
-            }
-            self.spi.write(&row).unwrap();
-        }
+        self.spi.write(buffer).unwrap();
     }
 }

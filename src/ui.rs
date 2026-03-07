@@ -10,13 +10,14 @@ use crate::config::{HEIGHT, WIDTH};
 use crate::get_faces::{get_random_face, PointMap};
 
 // ── Framebuffer (shared) ──────────────────────────────────────────────────────
+// Pixels stored as big-endian RGB565 u8 pairs — ready to DMA/write directly to display.
 
 pub struct Framebuffer<'a> {
-    buffer: &'a mut [Rgb565; WIDTH * HEIGHT],
+    buffer: &'a mut [u8; WIDTH * HEIGHT * 2],
 }
 
 impl<'a> Framebuffer<'a> {
-    pub fn new(buffer: &'a mut [Rgb565; WIDTH * HEIGHT]) -> Self {
+    pub fn new(buffer: &'a mut [u8; WIDTH * HEIGHT * 2]) -> Self {
         Framebuffer { buffer }
     }
 }
@@ -31,8 +32,23 @@ impl<'a> DrawTarget for Framebuffer<'a> {
     {
         for Pixel(coord, color) in pixels {
             if coord.x >= 0 && coord.x < WIDTH as i32 && coord.y >= 0 && coord.y < HEIGHT as i32 {
-                self.buffer[(coord.y as usize * WIDTH) + coord.x as usize] = color;
+                let raw = color.into_storage();
+                let idx = (coord.y as usize * WIDTH + coord.x as usize) * 2;
+                self.buffer[idx]     = (raw >> 8) as u8;
+                self.buffer[idx + 1] = raw as u8;
             }
+        }
+        Ok(())
+    }
+
+    // Fast clear: two-byte fill instead of iterating 57,600 pixels.
+    fn clear(&mut self, color: Rgb565) -> Result<(), Self::Error> {
+        let raw = color.into_storage();
+        let hi = (raw >> 8) as u8;
+        let lo = raw as u8;
+        for chunk in self.buffer.chunks_exact_mut(2) {
+            chunk[0] = hi;
+            chunk[1] = lo;
         }
         Ok(())
     }
@@ -121,7 +137,6 @@ mod state {
     static mut FACE: Option<PointMap> = None;
     static mut TARGET: Option<PointMap> = None;
 
-    // Simple LCG — shared with get_faces via the same atomic (jitter only needs weak randomness)
     static JITTER_RNG: AtomicU32 = AtomicU32::new(0xDEAD_BEEF);
 
     fn jitter_next() -> i32 {
@@ -189,7 +204,7 @@ pub fn tick() {
     state::tick();
 }
 
-pub fn draw_ui(buffer: &mut [Rgb565; WIDTH * HEIGHT]) {
+pub fn draw_ui(buffer: &mut [u8; WIDTH * HEIGHT * 2]) {
     let mut fb = Framebuffer::new(buffer);
     fb.clear(Rgb565::BLUE).unwrap();
 
