@@ -44,39 +44,3 @@ jobs:
           name: lilbud-mac
           path: lilbud-mac.zip
 
-  # ── Windows (x86-64) ─────────────────────────────────────────────────────────
-  # Requires WebView2, which ships with Windows 11 and Edge on Windows 10.
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: windows-cargo-${{ hashFiles('Cargo.lock') }}
-
-      - name: Install wasm-bindgen-cli
-        run: cargo install wasm-bindgen-cli --version "=0.2.92" --locked
-
-      - name: Build WASM
-        run: cargo build --release --target wasm32-unknown-unknown --no-default-features --features wasm
-
-      - name: Generate JS bindings
-        run: wasm-bindgen target/wasm32-unknown-unknown/release/lilbud.wasm --out-dir pkg --target web
-
-      - name: Build Windows exe
-        run: cargo build --release --target x86_64-pc-windows-msvc --no-default-features --features webview
-
-      - name: Package
-        run: Compress-Archive -Path target/x86_64-pc-windows-msvc/release/lilbud.exe -DestinationPath lilbud-windows.zip
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: lilbud-windows
-          path: lilbud-windows.zip
