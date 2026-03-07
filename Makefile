@@ -19,11 +19,14 @@ FACE_FILE     ?= faces.ndjson
 ELF           := target/thumbv6m-none-eabi/release/lilbud
 UF2           := target/lilbud.uf2
 WASM_BIN      := target/wasm32-unknown-unknown/release/lilbud.wasm
+WEBVIEW_BIN   := target/$(HOST_TRIPLE)/release/lilbud
+APP_BUNDLE    := lilbud.app
+DIST_ZIP      := lilbud-mac.zip
 MOUNT         ?= /Volumes/RPI-RP2
 
 # ── Phony targets ─────────────────────────────────────────────────────────────
 
-.PHONY: help desktop wasm wasm-bindgen serve webview embedded uf2 flash faces clean
+.PHONY: help desktop wasm serve webview app dist embedded uf2 flash faces clean
 
 help:
 	@echo ""
@@ -31,7 +34,9 @@ help:
 	@echo "  make desktop        Build and run the SDL2 desktop preview"
 	@echo "  make wasm           Build WASM binary + JS glue into pkg/"
 	@echo "  make serve          Build WASM then serve on http://localhost:8080"
-	@echo "  make webview        Build WASM then open in a native OS WebView window"
+	@echo "  make webview        Build WASM then open in a native OS WebView window (dev)"
+	@echo "  make app            Build distributable lilbud.app bundle (macOS)"
+	@echo "  make dist           Build lilbud.app and zip it for distribution"
 	@echo "  make embedded       Build release ELF for RP2040"
 	@echo "  make uf2            Build ELF and convert to UF2"
 	@echo "  make flash          Build UF2 and copy to \$$MOUNT (default: /Volumes/RPI-RP2)"
@@ -74,6 +79,30 @@ serve: wasm
 webview: wasm
 	cargo run --target $(HOST_TRIPLE) --no-default-features --features webview
 
+# ── macOS app bundle ──────────────────────────────────────────────────────────
+# Produces a self-contained lilbud.app that anyone on macOS can double-click.
+# The WASM binary and JS glue are embedded inside the native executable —
+# no external files needed.
+#
+# Note: the app is unsigned. First-time openers must right-click → Open,
+# or run: xattr -d com.apple.quarantine lilbud.app
+
+$(WEBVIEW_BIN): wasm
+	cargo build --release --target $(HOST_TRIPLE) \
+		--no-default-features --features webview
+
+app: $(WEBVIEW_BIN)
+	rm -rf $(APP_BUNDLE)
+	mkdir -p $(APP_BUNDLE)/Contents/MacOS
+	cp $(WEBVIEW_BIN) $(APP_BUNDLE)/Contents/MacOS/lilbud
+	cp Info.plist $(APP_BUNDLE)/Contents/Info.plist
+	@echo "Built $(APP_BUNDLE)"
+
+dist: app
+	rm -f $(DIST_ZIP)
+	zip -r $(DIST_ZIP) $(APP_BUNDLE)
+	@echo "Built $(DIST_ZIP)"
+
 # ── Embedded ──────────────────────────────────────────────────────────────────
 
 $(ELF):
@@ -94,4 +123,4 @@ flash: $(UF2)
 
 clean:
 	cargo clean
-	rm -rf pkg
+	rm -rf pkg $(APP_BUNDLE) $(DIST_ZIP)
