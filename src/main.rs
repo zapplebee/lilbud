@@ -5,7 +5,6 @@ mod config;
 mod get_faces;
 mod ui;
 
-#[cfg(feature = "embedded")]
 mod face_data;
 
 #[cfg(feature = "desktop")]
