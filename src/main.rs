@@ -2,9 +2,11 @@
 #![cfg_attr(feature = "embedded", no_main)]
 
 mod config;
-mod get_faces;
-mod ui;
 
+#[cfg(feature = "desktop")]
+mod get_faces;
+#[cfg(feature = "desktop")]
+mod ui;
 #[cfg(feature = "desktop")]
 mod sdl2_display;
 
@@ -72,13 +74,6 @@ pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 #[cfg(feature = "embedded")]
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
-// Static framebuffer — keeps 115KB off the stack.
-// draw_ui() always clears before drawing, so uninit is safe.
-#[cfg(feature = "embedded")]
-static mut FRAMEBUFFER: core::mem::MaybeUninit<
-    [embedded_graphics::pixelcolor::Rgb565; config::WIDTH * config::HEIGHT],
-> = core::mem::MaybeUninit::uninit();
-
 #[cfg(feature = "embedded")]
 #[cortex_m_rt::entry]
 fn main() -> ! {
@@ -86,7 +81,6 @@ fn main() -> ! {
     use hal::clocks::Clock;
     use hal::gpio::FunctionSpi;
     use hal::pac;
-    use hal::Timer;
 
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
@@ -106,7 +100,6 @@ fn main() -> ! {
     .unwrap();
 
     let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
-    let timer = Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
 
     let sio = hal::Sio::new(pac.SIO);
     let pins = hal::gpio::Pins::new(
@@ -120,34 +113,17 @@ fn main() -> ! {
         pac.SPI1,
         pins.gpio10.into_function::<FunctionSpi>(), // SCK
         pins.gpio11.into_function::<FunctionSpi>(), // MOSI
+        pins.gpio12.into_push_pull_output(),        // RST
         pins.gpio8.into_push_pull_output(),         // DC
         pins.gpio9.into_push_pull_output(),         // CS
-        pins.gpio25.into_push_pull_output(),        // BL (backlight)
+        pins.gpio25.into_push_pull_output(),        // BL
         &mut pac.RESETS,
         &clocks,
         &mut delay,
     );
 
-    crate::get_faces::seed_rng(timer.get_counter().ticks() as u32);
-    crate::get_faces::init();
-    ui::set_face();
-
-    let mut last_face_change = timer.get_counter();
-
+    // RED in RGB565 = 0xF800
     loop {
-        let now = timer.get_counter();
-        if now.checked_duration_since(last_face_change)
-            .map(|d| d.to_secs() >= 3)
-            .unwrap_or(false)
-        {
-            ui::set_face();
-            last_face_change = now;
-        }
-
-        ui::tick();
-        unsafe {
-            ui::draw_ui(FRAMEBUFFER.assume_init_mut());
-            display.flush(FRAMEBUFFER.assume_init_ref());
-        }
+        display.fill(0xF800);
     }
 }

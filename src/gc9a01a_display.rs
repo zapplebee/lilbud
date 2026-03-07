@@ -1,6 +1,7 @@
 //! GC9A01A display driver for the Waveshare RP2040-LCD-1.28
 //!
 //! Pinout (SPI1):
+//!   RST  = GPIO12
 //!   DC   = GPIO8
 //!   CS   = GPIO9
 //!   SCK  = GPIO10
@@ -17,15 +18,16 @@ use hal::clocks::{Clock, ClocksManager};
 use hal::fugit::RateExtU32;
 use hal::pac::SPI1;
 use hal::gpio::{
-    bank0::{Gpio8, Gpio9, Gpio10, Gpio11, Gpio25},
+    bank0::{Gpio8, Gpio9, Gpio10, Gpio11, Gpio12, Gpio25},
     FunctionSio, FunctionSpi, Pin, PullDown, SioOutput,
 };
 use hal::spi::{Enabled, Spi};
 use cortex_m::delay::Delay;
 
-type DcPin  = Pin<Gpio8,  FunctionSio<SioOutput>, PullDown>;
-type CsPin  = Pin<Gpio9,  FunctionSio<SioOutput>, PullDown>;
-type BlPin  = Pin<Gpio25, FunctionSio<SioOutput>, PullDown>;
+type RstPin  = Pin<Gpio12, FunctionSio<SioOutput>, PullDown>;
+type DcPin   = Pin<Gpio8,  FunctionSio<SioOutput>, PullDown>;
+type CsPin   = Pin<Gpio9,  FunctionSio<SioOutput>, PullDown>;
+type BlPin   = Pin<Gpio25, FunctionSio<SioOutput>, PullDown>;
 type MosiPin = Pin<Gpio11, FunctionSpi, PullDown>;
 type SckPin  = Pin<Gpio10, FunctionSpi, PullDown>;
 type DisplaySpi = Spi<Enabled, SPI1, (MosiPin, SckPin), 8>;
@@ -33,7 +35,7 @@ type DisplaySpi = Spi<Enabled, SPI1, (MosiPin, SckPin), 8>;
 pub struct GC9A01ADisplay {
     spi: DisplaySpi,
     dc:  DcPin,
-    cs:  CsPin,
+    _cs: CsPin,
     _bl: BlPin,
 }
 
@@ -42,6 +44,7 @@ impl GC9A01ADisplay {
         spi_dev: SPI1,
         sck:     SckPin,
         mosi:    MosiPin,
+        mut rst: RstPin,
         mut dc:  DcPin,
         mut cs:  CsPin,
         mut bl:  BlPin,
@@ -49,40 +52,41 @@ impl GC9A01ADisplay {
         clocks:  &ClocksManager,
         delay:   &mut Delay,
     ) -> Self {
-        // Use embedded-hal 0.2 MODE_0 for the init call (rp2040-hal 0.10 still takes this type)
         use embedded_hal::spi::MODE_0;
         let spi = Spi::<_, _, _, 8>::new(spi_dev, (mosi, sck)).init(
             resets,
             clocks.peripheral_clock.freq(),
-            4_000_000u32.Hz(),
+            40_000_000u32.Hz(),
             MODE_0,
         );
 
-        cs.set_high().unwrap();
-        dc.set_low().unwrap();
         bl.set_high().unwrap();
 
-        // Give the display time to power up before communicating
-        delay.delay_ms(200);
+        // Hardware reset: high → low → high, then CS permanently low
+        rst.set_high().unwrap();
+        delay.delay_ms(100);
+        rst.set_low().unwrap();
+        delay.delay_ms(100);
+        rst.set_high().unwrap();
+        cs.set_low().unwrap();
+        delay.delay_ms(100);
 
-        let mut disp = GC9A01ADisplay { spi, dc, cs, _bl: bl };
+        dc.set_low().unwrap();
+
+        let mut disp = GC9A01ADisplay { spi, dc, _cs: cs, _bl: bl };
         disp.init(delay);
         disp
     }
 
+    // CS stays permanently low; DC toggles to distinguish command vs data.
     fn cmd(&mut self, cmd: u8) {
-        self.cs.set_low().unwrap();
         self.dc.set_low().unwrap();
         self.spi.write(&[cmd]).unwrap();
-        self.dc.set_high().unwrap();
-        self.cs.set_high().unwrap();
     }
 
     fn data(&mut self, data: &[u8]) {
-        self.cs.set_low().unwrap();
         self.dc.set_high().unwrap();
         self.spi.write(data).unwrap();
-        self.cs.set_high().unwrap();
     }
 
     fn cmd_data(&mut self, cmd: u8, data: &[u8]) {
@@ -154,20 +158,30 @@ impl GC9A01ADisplay {
         delay.delay_ms(20);
     }
 
-    /// Write the full 240×240 Rgb565 framebuffer to the display.
+    /// Fill the entire display with a single RGB565 color.
+    pub fn fill(&mut self, color: u16) {
+        let pixel = [(color >> 8) as u8, color as u8];
+
+        self.cmd_data(0x2A, &[0x00, 0x00, 0x00, 0xEF]); // CASET 0..239
+        self.cmd_data(0x2B, &[0x00, 0x00, 0x00, 0xEF]); // RASET 0..239
+        self.cmd(0x2C);                                   // RAMWR
+
+        self.dc.set_high().unwrap();
+        for _ in 0..(WIDTH * HEIGHT) {
+            self.spi.write(&pixel).unwrap();
+        }
+    }
+
+    /// Write the full 240x240 Rgb565 framebuffer to the display.
     pub fn flush(&mut self, buffer: &[Rgb565; WIDTH * HEIGHT]) {
         self.cmd_data(0x2A, &[0x00, 0x00, 0x00, 0xEF]); // CASET 0..239
         self.cmd_data(0x2B, &[0x00, 0x00, 0x00, 0xEF]); // RASET 0..239
         self.cmd(0x2C);                                   // RAMWR
 
-        self.cs.set_low().unwrap();
         self.dc.set_high().unwrap();
-
         for pixel in buffer {
             let raw = pixel.into_storage();
             self.spi.write(&[(raw >> 8) as u8, raw as u8]).unwrap();
         }
-
-        self.cs.set_high().unwrap();
     }
 }
