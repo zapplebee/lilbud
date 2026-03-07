@@ -1,10 +1,14 @@
 #![cfg_attr(feature = "embedded", no_std)]
 #![cfg_attr(feature = "embedded", no_main)]
 
+// Rendering modules are not needed for the webview target — the WASM handles everything.
+#[cfg(not(feature = "webview"))]
 mod config;
+#[cfg(not(feature = "webview"))]
 mod get_faces;
+#[cfg(not(feature = "webview"))]
 mod ui;
-
+#[cfg(not(feature = "webview"))]
 mod face_data;
 
 #[cfg(feature = "desktop")]
@@ -13,8 +17,18 @@ mod sdl2_display;
 #[cfg(feature = "wasm")]
 mod wasm_display;
 
+#[cfg(feature = "webview")]
+mod webview_app;
+
 #[cfg(feature = "embedded")]
 mod gc9a01a_display;
+
+// ── WebView entry point ───────────────────────────────────────────────────────
+
+#[cfg(feature = "webview")]
+fn main() {
+    webview_app::run();
+}
 
 // ── WASM entry point ──────────────────────────────────────────────────────────
 // #[wasm_bindgen(start)] exports `start` as the wasm start function.

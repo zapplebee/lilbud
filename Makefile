@@ -23,7 +23,7 @@ MOUNT         ?= /Volumes/RPI-RP2
 
 # ── Phony targets ─────────────────────────────────────────────────────────────
 
-.PHONY: help desktop wasm wasm-bindgen serve embedded uf2 flash faces clean
+.PHONY: help desktop wasm wasm-bindgen serve webview embedded uf2 flash faces clean
 
 help:
 	@echo ""
@@ -31,6 +31,7 @@ help:
 	@echo "  make desktop        Build and run the SDL2 desktop preview"
 	@echo "  make wasm           Build WASM binary + JS glue into pkg/"
 	@echo "  make serve          Build WASM then serve on http://localhost:8080"
+	@echo "  make webview        Build WASM then open in a native OS WebView window"
 	@echo "  make embedded       Build release ELF for RP2040"
 	@echo "  make uf2            Build ELF and convert to UF2"
 	@echo "  make flash          Build UF2 and copy to \$$MOUNT (default: /Volumes/RPI-RP2)"
@@ -65,6 +66,13 @@ wasm: $(WASM_BIN)
 
 serve: wasm
 	python3 -m http.server 8080
+
+# ── WebView ───────────────────────────────────────────────────────────────────
+# Embeds the WASM + JS glue into a native OS WebView window (no browser needed).
+# `make wasm` must run first to populate pkg/ before the Rust build can include_bytes! them.
+
+webview: wasm
+	cargo run --target $(HOST_TRIPLE) --no-default-features --features webview
 
 # ── Embedded ──────────────────────────────────────────────────────────────────
 
