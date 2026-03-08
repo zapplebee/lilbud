@@ -51,9 +51,7 @@ help:
 faces:
 	@echo "Using face file: $(FACE_FILE)"
 	@test -f $(FACE_FILE) || (echo "Error: $(FACE_FILE) not found." && exit 1)
-	python3 gen_faces.py $(FACE_FILE) > src/face_data.rs.tmp
-	mv src/face_data.rs.tmp src/face_data.rs
-	@echo "Updated src/face_data.rs"
+	bun run gen_faces.ts $(FACE_FILE)
 
 # ── Desktop ───────────────────────────────────────────────────────────────────
 

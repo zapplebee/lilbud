@@ -1,11 +1,9 @@
 import { test, expect, beforeAll, afterAll, beforeEach } from 'bun:test'
 import { chromium, type Browser, type Page } from 'playwright'
+import { FACES, FACE_BY_EMO } from '../src/face-fixtures'
 
 const PORT = 3099
 const BASE = `http://localhost:${PORT}`
-
-// 18 x,y pairs — a minimal valid face frame
-const FAKE_FRAME = Array.from({ length: 36 }, (_, i) => i * 5)
 
 let browser: Browser
 let page: Page
@@ -47,7 +45,7 @@ const hidden = (sel: string) => page.locator(sel).isHidden()
 const waitVisible = (sel: string) => page.locator(sel).waitFor({ state: 'visible' })
 const waitHidden = (sel: string) => page.locator(sel).waitFor({ state: 'hidden' })
 
-const pushFrame = (pts = FAKE_FRAME) =>
+const pushFrame = (pts = FACES[0]) =>
   page.evaluate((p) => { (window as any).__mockHost.pushFrame(p) }, pts)
 
 test('starts undocked — shows empty room', async () => {
@@ -121,6 +119,36 @@ test('save sends WRITE and updates display', async () => {
   const write = cmds.find((c: any) => c.cmd === 'WRITE')
   expect(write?.path).toBe('/id_card.txt')
   expect(write?.data).toContain('New Name')
+})
+
+test('each fixture face docks without error', async () => {
+  for (const face of FACES) {
+    await page.goto(BASE)
+    await page.waitForSelector('#empty-room')
+    await pushFrame(face)
+    await waitVisible('#dock-view')
+  }
+})
+
+test('named emotion faces dock correctly', async () => {
+  for (const [emo, pts] of Object.entries(FACE_BY_EMO)) {
+    await page.goto(BASE)
+    await page.waitForSelector('#empty-room')
+    await pushFrame(pts)
+    await waitVisible('#dock-view')
+    // canvas should have content — check it's not all one color
+    const hasContent = await page.evaluate(() => {
+      const canvas = document.getElementById('face-canvas') as HTMLCanvasElement
+      const ctx = canvas.getContext('2d')!
+      const d = ctx.getImageData(0, 0, 240, 240).data
+      const first = (d[0] << 16) | (d[1] << 8) | d[2]
+      for (let i = 4; i < d.length; i += 4) {
+        if (((d[i] << 16) | (d[i+1] << 8) | d[i+2]) !== first) return true
+      }
+      return false
+    })
+    expect(hasContent).toBe(true)
+  }
 })
 
 test('cancel closes edit panel without saving', async () => {
