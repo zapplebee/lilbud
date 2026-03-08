@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>lilbud</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f172a; color: #e2e8f0; font-family: monospace; height: 100vh; display: flex; }
+    #empty-room { flex: 1; display: flex; align-items: center; justify-content: center; background: #0a1628; color: #4a6a8a; font-size: 1.2rem; }
+    #dock-view { flex: 1; display: flex; gap: 1.5rem; padding: 1.5rem; }
+    #face-canvas { display: block; border-radius: 50%; background: #1e3a5f; }
+    #needs-panel { margin-top: 1rem; font-size: 0.85rem; color: #94a3b8; line-height: 1.8; }
+    #id-card { flex: 1; }
+    #id-name { font-size: 1.5rem; margin-bottom: 0.5rem; min-height: 1.5rem; }
+    #id-bio { color: #94a3b8; white-space: pre-wrap; min-height: 2rem; }
+    #edit-panel { margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    input, textarea { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; padding: 0.4rem; font-family: monospace; width: 100%; }
+    button { background: #1e40af; color: #e2e8f0; border: none; padding: 0.3rem 0.8rem; cursor: pointer; font-family: monospace; margin-right: 0.5rem; }
+    button:hover { background: #2563eb; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="empty-room">lilbud is not here</div>
+
+  <div id="dock-view" hidden>
+    <div>
+      <canvas id="face-canvas" width="240" height="240"></canvas>
+      <div id="needs-panel">
+        <div>hunger: <span id="need-hunger">–</span></div>
+        <div>happiness: <span id="need-happiness">–</span></div>
+        <div>energy: <span id="need-energy">–</span></div>
+      </div>
+    </div>
+
+    <div id="id-card">
+      <div id="id-name"></div>
+      <div id="id-bio"></div>
+      <button id="btn-edit">edit</button>
+
+      <div id="edit-panel" hidden>
+        <input id="edit-name" type="text" placeholder="name" />
+        <textarea id="edit-bio" rows="4" placeholder="bio"></textarea>
+        <div>
+          <button id="btn-save">save</button>
+          <button id="btn-cancel">cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/dist/app.js"></script>
+</body>
+</html>
