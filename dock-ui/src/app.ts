@@ -27,6 +27,29 @@ function render() {
 const canvas = document.getElementById('face-canvas') as HTMLCanvasElement
 const ctx = canvas.getContext('2d')!
 
+// --- Animation state (matches ui.rs state::FACE / TARGET) ---
+// currentPts interpolates toward targetPts by ±2 per coordinate each RAF tick,
+// mirroring the interp(start, target, step=2) logic in tick().
+// Jitter is re-sampled every draw, exactly as draw_ui() does.
+let currentPts: number[] = []
+let targetPts:  number[] = []
+
+// Matches state::interp(start, target, step=2)
+function interp(start: number, target: number): number {
+  if (start < target) return Math.min(start + 2, target)
+  if (start > target) return Math.max(start - 2, target)
+  return start
+}
+
+function animLoop() {
+  if (state !== 'UNDOCKED' && currentPts.length === 36) {
+    for (let i = 0; i < 36; i++) currentPts[i] = interp(currentPts[i], targetPts[i])
+    renderFace(ctx, currentPts)
+  }
+  requestAnimationFrame(animLoop)
+}
+requestAnimationFrame(animLoop)
+
 // --- State transitions ---
 function transition(next: DockState) {
   if (state === next) return
@@ -36,8 +59,13 @@ function transition(next: DockState) {
 
 // --- Host events ---
 host.onFrame((points) => {
-  if (state === 'UNDOCKED') transition('DOCKED_FACE')
-  renderFace(ctx, points)
+  if (state === 'UNDOCKED') {
+    // Snap current to the incoming frame so the first draw is correct,
+    // not a lerp from wherever currentPts was before.
+    currentPts = [...points]
+    transition('DOCKED_FACE')
+  }
+  targetPts = [...points]
   if (disconnectTimer) clearTimeout(disconnectTimer)
   disconnectTimer = setTimeout(() => transition('UNDOCKED'), DISCONNECT_TIMEOUT_MS)
 })
