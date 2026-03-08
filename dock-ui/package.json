@@ -1,0 +1,13 @@
+{
+  "name": "dock-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run server.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "playwright": "^1.52.0"
+  }
+}

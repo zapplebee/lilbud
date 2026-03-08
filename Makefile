@@ -15,35 +15,37 @@ endif
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
-FACE_FILE     ?= faces.ndjson
-ELF           := target/thumbv6m-none-eabi/release/lilbud
-UF2           := target/lilbud.uf2
-WASM_BIN      := target/wasm32-unknown-unknown/release/lilbud.wasm
-WEBVIEW_BIN   := target/$(HOST_TRIPLE)/release/lilbud
-APP_BUNDLE    := lilbud.app
-DIST_ZIP      := lilbud-mac.zip
-MOUNT         ?= /Volumes/RPI-RP2
+FACE_FILE   ?= faces.ndjson
+ELF         := target/thumbv6m-none-eabi/release/lilbud
+UF2         := target/lilbud.uf2
+WEBVIEW_BIN := target/$(HOST_TRIPLE)/release/lilbud
+APP_BUNDLE  := lilbud.app
+DIST_ZIP    := lilbud-mac.zip
+MOUNT       ?= /Volumes/RPI-RP2
+DOCK_PORT   ?= 3000
 
 # ── Phony targets ─────────────────────────────────────────────────────────────
 
-.PHONY: help desktop wasm serve webview app dist embedded uf2 flash faces clean
+.PHONY: help webview app dist embedded uf2 flash faces dock dock-mock clean
 
 help:
 	@echo ""
 	@echo "  make faces          Regenerate src/face_data.rs from \$$FACE_FILE (default: faces.ndjson)"
-	@echo "  make desktop        Build and run the SDL2 desktop preview"
-	@echo "  make wasm           Build WASM binary + JS glue into pkg/"
-	@echo "  make serve          Build WASM then serve on http://localhost:8080"
-	@echo "  make webview        Build WASM then open in a native OS WebView window (dev)"
+	@echo "  make webview        Build and run the WebView host (dev)"
 	@echo "  make app            Build distributable lilbud.app bundle (macOS)"
 	@echo "  make dist           Build lilbud.app and zip it for distribution"
 	@echo "  make embedded       Build release ELF for RP2040"
 	@echo "  make uf2            Build ELF and convert to UF2"
 	@echo "  make flash          Build UF2 and copy to \$$MOUNT (default: /Volumes/RPI-RP2)"
+	@echo "  make dock           Start the dock UI dev server (real board mode)"
+	@echo "  make dock-mock      Start the dock UI dev server with mock data (no board needed)"
 	@echo "  make clean          Remove build artifacts"
 	@echo ""
 	@echo "  Override FACE_FILE to use a different ndjson source:"
 	@echo "    make faces FACE_FILE=~/lilbudmaker/lilbudz.ndjson"
+	@echo ""
+	@echo "  Override DOCK_PORT to change the dock UI port (default: 3000):"
+	@echo "    make dock-mock DOCK_PORT=4000"
 	@echo ""
 
 # ── Face data codegen ─────────────────────────────────────────────────────────
@@ -51,43 +53,21 @@ help:
 faces:
 	@echo "Using face file: $(FACE_FILE)"
 	@test -f $(FACE_FILE) || (echo "Error: $(FACE_FILE) not found." && exit 1)
-	python3 gen_faces.py $(FACE_FILE) > src/face_data.rs.tmp
-	mv src/face_data.rs.tmp src/face_data.rs
-	@echo "Updated src/face_data.rs"
+	bun run gen_faces.ts $(FACE_FILE)
 
-# ── Desktop ───────────────────────────────────────────────────────────────────
+# ── WebView host ──────────────────────────────────────────────────────────────
+# Native OS window (wry) that bridges the board over USB to the dock UI.
 
-desktop:
-	cargo run --target $(HOST_TRIPLE) --no-default-features --features desktop
-
-# ── WASM ──────────────────────────────────────────────────────────────────────
-
-$(WASM_BIN):
-	cargo build --release --target wasm32-unknown-unknown \
-		--no-default-features --features wasm
-
-wasm: $(WASM_BIN)
-	wasm-bindgen $(WASM_BIN) --out-dir pkg --target web
-
-serve: wasm
-	python3 -m http.server 8080
-
-# ── WebView ───────────────────────────────────────────────────────────────────
-# Embeds the WASM + JS glue into a native OS WebView window (no browser needed).
-# `make wasm` must run first to populate pkg/ before the Rust build can include_bytes! them.
-
-webview: wasm
+webview:
 	cargo run --target $(HOST_TRIPLE) --no-default-features --features webview
 
 # ── macOS app bundle ──────────────────────────────────────────────────────────
 # Produces a self-contained lilbud.app that anyone on macOS can double-click.
-# The WASM binary and JS glue are embedded inside the native executable —
-# no external files needed.
 #
 # Note: the app is unsigned. First-time openers must right-click → Open,
 # or run: xattr -d com.apple.quarantine lilbud.app
 
-$(WEBVIEW_BIN): wasm
+$(WEBVIEW_BIN):
 	cargo build --release --target $(HOST_TRIPLE) \
 		--no-default-features --features webview
 
@@ -102,6 +82,17 @@ dist: app
 	rm -f $(DIST_ZIP)
 	zip -r $(DIST_ZIP) $(APP_BUNDLE)
 	@echo "Built $(DIST_ZIP)"
+
+# ── Dock UI ───────────────────────────────────────────────────────────────────
+# Companion web app served at http://localhost:$(DOCK_PORT).
+# dock      — real mode: expects a live board connection via the webview host
+# dock-mock — mock mode: auto-cycles faces and fixture data (no board needed)
+
+dock:
+	cd dock-ui && PORT=$(DOCK_PORT) bun run server.ts
+
+dock-mock:
+	cd dock-ui && PORT=$(DOCK_PORT) DOCK_MOCK=1 bun run server.ts
 
 # ── Embedded ──────────────────────────────────────────────────────────────────
 
@@ -123,4 +114,4 @@ flash: $(UF2)
 
 clean:
 	cargo clean
-	rm -rf pkg $(APP_BUNDLE) $(DIST_ZIP)
+	rm -rf $(APP_BUNDLE) $(DIST_ZIP) dock-ui/dist
