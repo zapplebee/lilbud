@@ -1,4 +1,5 @@
 import { host } from './host'
+import { renderFace, renderEmptyRoom } from './render'
 import type { DockState } from './types'
 
 const DISCONNECT_TIMEOUT_MS = 1500
@@ -26,21 +27,6 @@ function render() {
 const canvas = document.getElementById('face-canvas') as HTMLCanvasElement
 const ctx = canvas.getContext('2d')!
 
-function drawFace(points: number[]) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  ctx.fillStyle = '#1e3a5f'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  if (points.length < 2) return
-  ctx.strokeStyle = '#7dd3fc'
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  ctx.moveTo(points[0], points[1])
-  for (let i = 2; i < points.length; i += 2) {
-    ctx.lineTo(points[i], points[i + 1])
-  }
-  ctx.stroke()
-}
-
 // --- State transitions ---
 function transition(next: DockState) {
   if (state === next) return
@@ -51,7 +37,7 @@ function transition(next: DockState) {
 // --- Host events ---
 host.onFrame((points) => {
   if (state === 'UNDOCKED') transition('DOCKED_FACE')
-  drawFace(points)
+  renderFace(ctx, points)
   if (disconnectTimer) clearTimeout(disconnectTimer)
   disconnectTimer = setTimeout(() => transition('UNDOCKED'), DISCONNECT_TIMEOUT_MS)
 })
