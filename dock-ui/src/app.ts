@@ -1,10 +1,11 @@
 import { host } from './host'
 import { renderFace } from './render'
-import type { DockState } from './types'
+import type { DockState, DeviceState } from './types'
 
 const DISCONNECT_TIMEOUT_MS = 1500
 
-let state: DockState = 'UNDOCKED'
+let uiState: DockState = 'UNDOCKED'
+let deviceState: DeviceState | null = null
 let disconnectTimer: ReturnType<typeof setTimeout> | null = null
 
 // --- DOM refs ---
@@ -21,10 +22,35 @@ const elStatusInput = document.getElementById('status-input') as HTMLTextAreaEle
 const elCollectedList = document.getElementById('collected-list')!
 
 // --- Render ---
+function escHtml(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function renderFromState(s: DeviceState) {
+  elIdName.textContent = s.identity.name
+  elIdBio.textContent = s.identity.bio
+  elMyStatusDisplay.textContent = s.status
+
+  elCollectedList.innerHTML = ''
+  for (const entry of s.collected) {
+    const el = document.createElement('div')
+    el.className = 'status-entry'
+    el.innerHTML = `
+      <span class="status-name">${escHtml(entry.from)}</span>
+      <span class="status-text">${escHtml(entry.text)}</span>
+      <button class="status-dismiss" title="dismiss">×</button>
+    `
+    el.querySelector('.status-dismiss')!.addEventListener('click', () => {
+      host.dispatch({ type: 'DISMISS', from: entry.from })
+    })
+    elCollectedList.appendChild(el)
+  }
+}
+
 function render() {
-  elEmptyRoom.hidden = state !== 'UNDOCKED'
-  elDockView.hidden = state === 'UNDOCKED'
-  elEditIdPanel.hidden = state !== 'DOCKED_EDITING'
+  elEmptyRoom.hidden = uiState !== 'UNDOCKED'
+  elDockView.hidden = uiState === 'UNDOCKED'
+  elEditIdPanel.hidden = uiState !== 'DOCKED_EDITING'
 }
 
 // --- Face canvas ---
@@ -46,7 +72,7 @@ let lastFrameTime = 0
 function animLoop(now: number) {
   if (now - lastFrameTime >= FRAME_MS) {
     lastFrameTime = now
-    if (state !== 'UNDOCKED' && currentPts.length === 36) {
+    if (uiState !== 'UNDOCKED' && currentPts.length === 36) {
       for (let i = 0; i < 36; i++) currentPts[i] = interp(currentPts[i], targetPts[i])
       renderFace(ctx, currentPts)
     }
@@ -55,46 +81,48 @@ function animLoop(now: number) {
 }
 requestAnimationFrame(animLoop)
 
-// --- State transitions ---
+// --- UI state transitions ---
 function transition(next: DockState) {
-  if (state === next) return
-  state = next
+  if (uiState === next) return
+  uiState = next
   render()
 }
 
-// --- Collected statuses ---
-const pendingReads = new Set<string>()
-
-function loadCollected() {
-  host.sendCommand({ cmd: 'LIST', path: '/collected' })
+function resetDisconnectTimer() {
+  if (disconnectTimer) clearTimeout(disconnectTimer)
+  disconnectTimer = setTimeout(() => transition('UNDOCKED'), DISCONNECT_TIMEOUT_MS)
 }
 
-function escHtml(s: string) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
+// --- Host events ---
+host.onEvent((event) => {
+  if (event.type === 'SYNC') {
+    deviceState = event
+    renderFromState(event)
+    if (uiState === 'UNDOCKED') {
+      currentPts = [...event.face.current]
+      targetPts = [...event.face.target]
+      transition('DOCKED_FACE')
+    }
+    resetDisconnectTimer()
+    return
+  }
 
-function renderCollected(name: string, text: string) {
-  const id = `collected-${name}`
-  if (document.getElementById(id)) return
-
-  const el = document.createElement('div')
-  el.className = 'status-entry'
-  el.id = id
-  el.innerHTML = `
-    <span class="status-name">${escHtml(name)}</span>
-    <span class="status-text">${escHtml(text)}</span>
-    <button class="status-dismiss" title="dismiss">×</button>
-  `
-  el.querySelector('.status-dismiss')!.addEventListener('click', () => {
-    host.sendCommand({ cmd: 'DELETE', path: `/collected/${name}.txt` })
-    el.remove()
-  })
-  elCollectedList.appendChild(el)
-}
+  if (event.type === 'FRAME') {
+    if (event.points.length !== 36) return
+    if (uiState === 'UNDOCKED') {
+      currentPts = [...event.points]
+      targetPts = [...event.points]
+      transition('DOCKED_FACE')
+      host.dispatch({ type: 'REQUEST_SYNC' })
+    }
+    targetPts = [...event.points]
+    resetDisconnectTimer()
+  }
+})
 
 // --- My status editing ---
 elMyStatusDisplay.addEventListener('click', () => {
-  if (state !== 'DOCKED_FACE') return
+  if (uiState !== 'DOCKED_FACE') return
   elStatusInput.value = elMyStatusDisplay.textContent ?? ''
   elMyStatusDisplay.hidden = true
   elMyStatusEdit.hidden = false
@@ -103,10 +131,7 @@ elMyStatusDisplay.addEventListener('click', () => {
 
 document.getElementById('btn-save-status')?.addEventListener('click', () => {
   const text = elStatusInput.value.trim()
-  if (text) {
-    host.sendCommand({ cmd: 'WRITE', path: '/status.txt', data: text })
-    elMyStatusDisplay.textContent = text
-  }
+  if (text) host.dispatch({ type: 'SET_STATUS', text })
   elMyStatusDisplay.hidden = false
   elMyStatusEdit.hidden = true
 })
@@ -116,68 +141,17 @@ document.getElementById('btn-cancel-status')?.addEventListener('click', () => {
   elMyStatusEdit.hidden = true
 })
 
-// --- Host events ---
-host.onFrame((points) => {
-  if (state === 'UNDOCKED') {
-    currentPts = [...points]
-    transition('DOCKED_FACE')
-    host.sendCommand({ cmd: 'READ', path: '/id_card.txt' })
-    host.sendCommand({ cmd: 'READ', path: '/status.txt' })
-    loadCollected()
-  }
-  targetPts = [...points]
-  if (disconnectTimer) clearTimeout(disconnectTimer)
-  disconnectTimer = setTimeout(() => transition('UNDOCKED'), DISCONNECT_TIMEOUT_MS)
-})
-
-host.onFileResult((path, data) => {
-  if (path === '/id_card.txt') {
-    const nl = data.indexOf('\n')
-    if (state === 'DOCKED_EDITING') {
-      elEditName.value = nl === -1 ? data : data.slice(0, nl)
-      elEditBio.value = nl === -1 ? '' : data.slice(nl + 1)
-    } else {
-      elIdName.textContent = nl === -1 ? data : data.slice(0, nl)
-      elIdBio.textContent = nl === -1 ? '' : data.slice(nl + 1)
-    }
-    return
-  }
-  if (path === '/status.txt') {
-    elMyStatusDisplay.textContent = data
-    return
-  }
-  if (path.startsWith('/collected/')) {
-    const filename = path.slice('/collected/'.length)
-    const name = filename.endsWith('.txt') ? filename.slice(0, -4) : filename
-    pendingReads.delete(filename)
-    renderCollected(name, data)
-  }
-})
-
-host.onListResult((path, entries) => {
-  if (path !== '/collected') return
-  for (const filename of entries) {
-    if (!pendingReads.has(filename) && !document.getElementById(`collected-${filename.replace(/\.txt$/, '')}`)) {
-      pendingReads.add(filename)
-      host.sendCommand({ cmd: 'READ', path: `/collected/${filename}` })
-    }
-  }
-})
-
 // --- Identity edit ---
 document.getElementById('btn-edit-id')?.addEventListener('click', () => {
-  if (state !== 'DOCKED_FACE') return
-  elEditName.value = elIdName.textContent ?? ''
-  elEditBio.value = elIdBio.textContent ?? ''
+  if (uiState !== 'DOCKED_FACE' || !deviceState) return
+  elEditName.value = deviceState.identity.name
+  elEditBio.value = deviceState.identity.bio
   transition('DOCKED_EDITING')
 })
 
 document.getElementById('btn-save-id')?.addEventListener('click', () => {
-  if (state !== 'DOCKED_EDITING') return
-  const data = `${elEditName.value}\n${elEditBio.value}`
-  host.sendCommand({ cmd: 'WRITE', path: '/id_card.txt', data })
-  elIdName.textContent = elEditName.value
-  elIdBio.textContent = elEditBio.value
+  if (uiState !== 'DOCKED_EDITING') return
+  host.dispatch({ type: 'SET_IDENTITY', name: elEditName.value, bio: elEditBio.value })
   transition('DOCKED_FACE')
 })
 
@@ -187,14 +161,15 @@ document.getElementById('btn-cancel-id')?.addEventListener('click', () => {
 
 // --- Action buttons ---
 document.getElementById('btn-feed')?.addEventListener('click', () => {
-  host.sendCommand({ cmd: 'WRITE', path: '/action.txt', data: 'feed' })
+  host.dispatch({ type: 'DO_ACTION', kind: 'feed' })
 })
 document.getElementById('btn-play')?.addEventListener('click', () => {
-  host.sendCommand({ cmd: 'WRITE', path: '/action.txt', data: 'play' })
+  host.dispatch({ type: 'DO_ACTION', kind: 'play' })
 })
 document.getElementById('btn-sleep')?.addEventListener('click', () => {
-  host.sendCommand({ cmd: 'WRITE', path: '/action.txt', data: 'sleep' })
+  host.dispatch({ type: 'DO_ACTION', kind: 'sleep' })
 })
 
 // --- Init ---
 render()
+host.dispatch({ type: 'REQUEST_SYNC' })

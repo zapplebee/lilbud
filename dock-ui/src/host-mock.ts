@@ -1,67 +1,73 @@
-import type { Host, HostCommand } from './types'
+import type { Host, DeviceAction, DeviceEvent, DeviceState } from './types'
 import { FACES } from './face-fixtures'
 
-export interface MockControls {
-  pushFrame(points: number[]): void
-  pushFileResult(path: string, data: string): void
-  commands(): HostCommand[]
-}
-
 export function createMockHost(): Host {
-  const frameCallbacks: Array<(points: number[]) => void> = []
-  const fileCallbacks: Array<(path: string, data: string) => void> = []
-  const listCallbacks: Array<(path: string, entries: string[]) => void> = []
-  const _commands: HostCommand[] = []
+  const callbacks: Array<(event: DeviceEvent) => void> = []
 
-  const files: Record<string, string> = {
-    '/id_card.txt': 'lilbud\na small creature who loves snacks and naps',
-    '/status.txt': 'just had a really long nap',
-    '/collected/sprout.txt': 'gave away my last potato chip. no regrets',
-    '/collected/mossdog.txt': 'found a really good stick today',
-    '/collected/pebble.txt': 'recovering from a big week',
+  let state: DeviceState = {
+    mode: 'awake',
+    identity: { name: 'lilbud', bio: 'a small creature who loves snacks and naps' },
+    status: 'just had a really long nap',
+    collected: [
+      { from: 'sprout', text: 'gave away my last potato chip. no regrets' },
+      { from: 'mossdog', text: 'found a really good stick today' },
+      { from: 'pebble', text: 'recovering from a big week' },
+    ],
+    face: { current: FACES[0], target: FACES[0] },
   }
 
-  const controls: MockControls = {
-    pushFrame: (points) => frameCallbacks.forEach(cb => cb(points)),
-    pushFileResult: (path, data) => fileCallbacks.forEach(cb => cb(path, data)),
-    commands: () => [..._commands],
+  function emit(event: DeviceEvent) {
+    callbacks.forEach(cb => cb(event))
   }
 
-  ;(window as any).__mockHost = controls
+  function sync() {
+    emit({ type: 'SYNC', ...state })
+  }
+
+  // Simulate device already connected: send initial sync after a tick.
+  setTimeout(sync, 0)
 
   let faceIdx = 0
-  let tickCount = 0
-  const FACE_HOLD_TICKS = 40
+  let tick = 0
+  const FACE_HOLD = 90 // ~3s at 30fps
+
   setInterval(() => {
-    controls.pushFrame(FACES[faceIdx])
-    tickCount++
-    if (tickCount >= FACE_HOLD_TICKS) {
-      tickCount = 0
+    tick++
+    if (tick >= FACE_HOLD) {
+      tick = 0
       faceIdx = (faceIdx + 1) % FACES.length
+      state = { ...state, face: { ...state.face, target: FACES[faceIdx] } }
     }
-  }, 50)
+    emit({ type: 'FRAME', points: FACES[faceIdx] })
+  }, 1000 / 30)
 
   return {
-    sendCommand(msg) {
-      _commands.push(msg)
-      if (msg.cmd === 'READ') {
-        const data = files[msg.path] ?? ''
-        setTimeout(() => fileCallbacks.forEach(cb => cb(msg.path, data)), 0)
-      } else if (msg.cmd === 'WRITE') {
-        files[msg.path] = msg.data
-      } else if (msg.cmd === 'DELETE') {
-        delete files[msg.path]
-      } else if (msg.cmd === 'LIST') {
-        const prefix = msg.path.endsWith('/') ? msg.path : msg.path + '/'
-        const entries = Object.keys(files)
-          .filter(k => k.startsWith(prefix))
-          .map(k => k.slice(prefix.length))
-          .filter(k => !k.includes('/'))
-        setTimeout(() => listCallbacks.forEach(cb => cb(msg.path, entries)), 0)
+    dispatch(action: DeviceAction) {
+      switch (action.type) {
+        case 'REQUEST_SYNC':
+          setTimeout(sync, 0)
+          break
+        case 'SET_IDENTITY':
+          state = { ...state, identity: { name: action.name, bio: action.bio } }
+          sync()
+          break
+        case 'SET_STATUS':
+          state = { ...state, status: action.text }
+          sync()
+          break
+        case 'DISMISS':
+          state = { ...state, collected: state.collected.filter(c => c.from !== action.from) }
+          sync()
+          break
+        case 'DO_ACTION': {
+          const mode = action.kind === 'sleep' ? 'sleeping' : action.kind === 'feed' ? 'eating' : 'playing'
+          state = { ...state, mode }
+          sync()
+          setTimeout(() => { state = { ...state, mode: 'awake' }; sync() }, 3000)
+          break
+        }
       }
     },
-    onFrame(cb) { frameCallbacks.push(cb) },
-    onFileResult(cb) { fileCallbacks.push(cb) },
-    onListResult(cb) { listCallbacks.push(cb) },
+    onEvent(cb) { callbacks.push(cb) },
   }
 }

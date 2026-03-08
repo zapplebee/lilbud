@@ -1,29 +1,18 @@
-import type { Host, HostCommand } from './types'
+import type { Host, DeviceAction, DeviceEvent } from './types'
 
 // Wry WebView IPC implementation.
 export function createRealHost(): Host {
-  const frameCallbacks: Array<(points: number[]) => void> = []
-  const fileCallbacks: Array<(path: string, data: string) => void> = []
-  const listCallbacks: Array<(path: string, entries: string[]) => void> = []
+  const callbacks: Array<(event: DeviceEvent) => void> = []
 
-  ;(window as any).__boardFrame = (points: number[]) => {
-    frameCallbacks.forEach(cb => cb(points))
-  }
-
-  ;(window as any).__fileResult = (path: string, data: string) => {
-    fileCallbacks.forEach(cb => cb(path, data))
-  }
-
-  ;(window as any).__listResult = (path: string, entries: string[]) => {
-    listCallbacks.forEach(cb => cb(path, entries))
+  // Called by the Rust host to push events into the web UI.
+  ;(window as any).__deviceEvent = (event: DeviceEvent) => {
+    callbacks.forEach(cb => cb(event))
   }
 
   return {
-    sendCommand(msg: HostCommand) {
-      ;(window as any).ipc?.postMessage(JSON.stringify(msg))
+    dispatch(action: DeviceAction) {
+      ;(window as any).ipc?.postMessage(JSON.stringify(action))
     },
-    onFrame(cb) { frameCallbacks.push(cb) },
-    onFileResult(cb) { fileCallbacks.push(cb) },
-    onListResult(cb) { listCallbacks.push(cb) },
+    onEvent(cb) { callbacks.push(cb) },
   }
 }
