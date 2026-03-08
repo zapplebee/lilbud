@@ -39,16 +39,24 @@ function jitter4(): [[number,number],[number,number],[number,number],[number,num
   ]
 }
 
-function tri(
+// On the device, embedded-graphics draws the head as two separate filled triangles
+// (abc + cda). In Canvas 2D, drawing two triangles that share a diagonal edge (c→a)
+// causes anti-aliased semi-transparent pixels along that seam — an artifact that does
+// not exist on the device because its framebuffer has no alpha channel.
+// Fix: draw the quad as a single closed 4-point polygon so the shared edge is never
+// rendered at all. The fill result is identical to two triangles on solid color targets.
+function quad(
   ctx: CanvasRenderingContext2D,
   x1: number, y1: number,
   x2: number, y2: number,
   x3: number, y3: number,
+  x4: number, y4: number,
 ) {
   ctx.beginPath()
   ctx.moveTo(x1, y1)
   ctx.lineTo(x2, y2)
   ctx.lineTo(x3, y3)
+  ctx.lineTo(x4, y4)
   ctx.closePath()
   ctx.fill()
 }
@@ -73,15 +81,13 @@ export function renderFace(ctx: CanvasRenderingContext2D, pts: number[]) {
   const sx = (i: number) => px(i) + sp[i][0]
   const sy = (i: number) => py(i) + sp[i][1]
 
-  // Shadow head  (a=0, b=1, c=2, d=3)
+  // Shadow head  (a=0, b=1, c=2, d=3) — single quad, no seam
   ctx.fillStyle = SHADOW
-  tri(ctx, sx(0), sy(0), sx(1), sy(1), sx(2), sy(2))  // a b c
-  tri(ctx, sx(2), sy(2), sx(3), sy(3), sx(0), sy(0))  // c d a
+  quad(ctx, sx(0), sy(0), sx(1), sy(1), sx(2), sy(2), sx(3), sy(3))
 
-  // Head
+  // Head — single quad, no seam
   ctx.fillStyle = HEAD
-  tri(ctx, px(0), py(0), px(1), py(1), px(2), py(2))  // a b c
-  tri(ctx, px(2), py(2), px(3), py(3), px(0), py(0))  // c d a
+  quad(ctx, px(0), py(0), px(1), py(1), px(2), py(2), px(3), py(3))
 
   // Face lines  (pairs: e,f=4,5  g,h=6,7  i,j=8,9  k,l=10,11  m,n=12,13  o,p=14,15)
   ctx.strokeStyle = INK
